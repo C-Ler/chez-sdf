@@ -54,12 +54,12 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
       (display (type-properties thing))
       (display-message message (get-port scr)))))
 
-(define-generic-procedure-handler send-message!
-  (match-args message? object?)
-  (let ((scr (make-screen 'name 'the-screen))) ;原本只是个#f,接着报错了,怀疑是捡起东西后提示某物到哪过于简陋 2024年1月23日21:49:58
-    (lambda (message thing)
-      ;; (display (type-properties thing))
-      (display-message message (get-port scr)))))
+;; (define-generic-procedure-handler send-message!
+;;   (match-args message? object?)
+;;   (let ((scr (make-screen 'name 'the-screen))) ;原本只是个#f,接着报错了,怀疑是捡起东西后提示某物到哪过于简陋 2024年1月23日21:49:58
+;;     (lambda (message thing)
+;;       ;; (display (type-properties thing))
+;;       (display-message message (get-port scr)))))
 
 ;;; Containers
 
@@ -214,7 +214,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
   (make-property 'bag
                  'predicate (lambda (x) (bag? x))
                  'default-supplier
-                 (lambda () (make-bag 'name 'my-bag))))
+                 (lambda () (make-bag 'name 'bag))))	;所有人物的bag都特么叫my-bag,得想个办法,改成xx的bag这样  2024年1月28日18:17:47
 
 (define person?
   (make-type 'person (list persohealth persobag)))
@@ -525,7 +525,8 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
                  actor))
 
 (define generic-move!
-  (most-specific-generic-procedure 'generic-move! 4 #f))
+  (most-specific-generic-procedure 'generic-move! 4 (lambda (obj container container2 hold)
+						      (display obj))))
 
 ;;; TODO: guarantee that THING is in FROM.
 ;;; Also that the people involved are local.

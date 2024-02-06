@@ -21,16 +21,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 |#
 
-;;;; Function predicates
 
-(define function-template
-  (make-predicate-template 'function
-                           '((?* domains -) (? codomain))
-                           tagging-strategy:never
-    (lambda (get-tag)
-      (lambda (object)
-        (and (simple-function? object)
-             (tag<= (applicable-object-tag object) (get-tag)))))))
 
 ;;; The resulting predicate represents a "function space" for the
 ;;; given sets.
@@ -40,11 +31,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 (define function-predicate?
   (predicate-template-predicate function-template))
 
-(define function-predicate-domains
-  (predicate-template-accessor 'domains function-template))
 
-(define function-predicate-codomain
-  (predicate-template-accessor 'codomain function-template))
 
 (define (function-predicate-arity predicate)
   (length (function-predicate-domains predicate)))
@@ -78,7 +65,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 (define (make-signature-selector arity domain-index
                                  codomain-index)
-  (guarantee exact-nonnegative-integer? arity)
+  (guarantee gp-exact-nonnegative-integer? arity)
   (guarantee (index-predicate arity) domain-index)
   (guarantee (index-predicate 1) codomain-index)
   (lambda (operator)
@@ -87,12 +74,26 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
       ((codomain) (car (index->booleans codomain-index 1)))
       (else (error "Unknown operator:" operator)))))
 
-;;;; Functions
 
-(define (function? object)
-  (or (simple-function? object)
-      (union-function? object)))
-(register-predicate! function? 'function)
+;;;; Union functions
+
+(define (union-function-name union)
+  `(union
+    ,@(map simple-function-name
+           (union-function-components union))))
+
+(define (union-function-predicate union)
+  (let ((predicates
+         (map simple-function-predicate
+              (union-function-components union))))
+    (make-function-predicate (apply map
+                                    disjoin
+                                    (map function-predicate-domains
+                                         predicates))
+                             (disjoin*
+                              (map function-predicate-codomain
+                                   predicates)))))
+;;;; Functions
 
 (define (apply-function function args)
   (apply function args))
@@ -116,13 +117,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 (define (function-predicate function)
   (tag->predicate (function-tag function)))
 
-(define (function-components function)
-  (cond ((simple-function? function)
-         (list function))
-        ((union-function? function)
-         (union-function-components function))
-        (else
-         (error:not-a function? function))))
+
 
 (define (map-function procedure function)
   (union-function*
@@ -134,12 +129,6 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 ;;;; Simple functions
 
-(define (simple-function? object)
-  (and (applicable-object? object)
-       (simple-function-metadata?
-        (applicable-object->object object))))
-(register-predicate! simple-function? 'simple-function)
-(set-predicate<=! simple-function? function?)
 
 (define (make-simple-function name predicate procedure)
   (letrec
@@ -150,45 +139,6 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
          (lambda args (apply-simple-function function args)))))
     function))
 
-(define-record-type (<simple-function-metadata> make-simple-function-metadata simple-function-metadata?)
-  (fields (immutable name simple-function-metadata-name) (immutable  procedure simple-function-metadata-procedure))
-  )
-
-(define (simple-function-name function)
-  (simple-function-metadata-name
-   (applicable-object->object function)))
-
-(define (simple-function-tag function)
-  (applicable-object-tag function))
-
-(define (simple-function-predicate function)
-  (tag->predicate (simple-function-tag function)))
-
-(define (simple-function-procedure function)
-  (simple-function-metadata-procedure
-   (applicable-object->object function)))
-
-(define (simple-function-domains function)
-  (function-predicate-domains
-   (simple-function-predicate function)))
-
-(define (simple-function-codomain function)
-  (function-predicate-codomain
-   (simple-function-predicate function)))
-
-(define (simple-function-arity function)
-  (length (simple-function-domains function)))
-
-(define (simple-function-apply-fit function args)
-  (let ((domains (simple-function-domains function)))
-    (and (= (length domains) (length args))
-         (let ((fits (map value-fit args domains)))
-           (and (not (memq #f fits))
-                (combine-fits
-                 (lambda (args)
-                   (apply (simple-function-procedure function)
-                          args))
-                 fits))))))
 
 (define (apply-simple-function function args)
   (let ((fit (simple-function-apply-fit function args)))
@@ -199,21 +149,24 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 (define (simple-generic-function? object)
   (and (simple-function? object)
        (generic-procedure? (simple-function-procedure object))))
-(register-predicate! simple-generic-function?
-                     'simple-generic-function)
-(set-predicate<=! simple-generic-function? simple-function?)
 
-(define-generic-procedure-handler value-restriction
-  (match-args simple-generic-function? predicate?)
-  (lambda (value predicate)
-    (let ((handlers
-           (filter predicate
-                   (generic-procedure-handlers
-                    (simple-function-procedure value)))))
-      (and (pair? handlers)
-           (lambda ()
-             (union-function* handlers))))))
-
+(define func-sgf (begin
+		   (register-predicate! simple-generic-function?
+					'simple-generic-function)
+		   
+		   (set-predicate<=! simple-generic-function? simple-function?)
+		   
+		   (define-generic-procedure-handler value-restriction
+		     (match-args simple-generic-function? predicate?)
+		     (lambda (value predicate)
+		       (let ((handlers
+			      (filter predicate
+				      (generic-procedure-handlers
+				       (simple-function-procedure value)))))
+			 (and (pair? handlers)
+			      (lambda ()
+				(union-function* handlers))))))))
+
 ;;;; Endo-functions
 
 (define (endo-function-predicate? object)
@@ -223,9 +176,11 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
               (eqv? (car domains)
                     (function-predicate-codomain object))
               (null? (cdr domains))))))
-(register-predicate! endo-function-predicate?
+
+(define func-efp (begin
+		   (register-predicate! endo-function-predicate?
                      'endo-function-predicate)
-(set-predicate<=! endo-function-predicate? function-predicate?)
+		   (set-predicate<=! endo-function-predicate? function-predicate?)))
 
 (define (make-endo-function-predicate domain)
   (make-function-predicate (list domain) domain))
@@ -238,125 +193,28 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
   (and (simple-function? object)
        (endo-function-predicate?
         (simple-function-predicate object))))
-(register-predicate! simple-endo-function? 'simple-endo-function)
-(set-predicate<=! simple-endo-function? simple-function?)
+
+(define func-sef (begin
+		   (register-predicate! simple-endo-function? 'simple-endo-function)
+		   (set-predicate<=! simple-endo-function? simple-function?)))
 
 (define (simple-endo-function-domain function)
   (endo-function-predicate-domain
    (simple-function-predicate function)))
-
+
 ;;;; Union functions
 
 (define (union-function function . functions)
   (union-function* (cons function functions)))
 
-(define (union-function* functions)
-  (guarantee-list-of function? functions)
-  (if (null? functions)
-      (error union-function* "Can't make an empty union function."))
-  (let ((simple-functions
-         (append-map function-components functions)))
-    (let ((arity (simple-function-arity (car simple-functions))))
-      (for-each
-       (lambda (simple-function)
-         (if (not (= arity
-                       (simple-function-arity simple-function)))
-             (error "Inconsistent arity in unio"
-                    arity
-                    (simple-function-arity simple-function))))
-       (cdr simple-functions)))
-    (if (and (pair? simple-functions)
-             (null? (cdr simple-functions)))
-        (car simple-functions)
-        (letrec
-            ((union-function
-              (let ((union (make-object-union simple-functions)))
-                (make-object-applicable
-                 (get-predicate union)
-                 union
-                 (lambda args
-                   (apply-union-function union-function
-                                         args))))))
-          union-function))))
+(define func-uf (define-generic-procedure-handler value-restriction
+		  (match-args union-function? predicate?)
+		  (lambda (value predicate)
+		    (let ((components
+			   (filter predicate
+				   (union-function-components value))))
+		      (and (pair? components)
+			   (lambda () (union-function* components)))))))
 
-(define (apply-union-function function args)
-  (let ((fit (union-function-apply-fit function args)))
-    (if (not fit)
-        (error "Inapplicable functio" function args))
-    (fit)))
+;;; functions
 
-(define (union-function-apply-fit function args)
-  (let ((fits (union-function-component-fits function args)))
-    (and (pair? fits)
-         (combine-fits object-union* fits))))
-
-(define (union-function-component-fits function args)
-  (let ((fits
-         (map (lambda (function)
-                (simple-function-apply-fit
-                   function args))
-              (union-function-components function))))
-    (let ((functions
-           (filter-map (lambda (function fit)
-                         (and fit function))
-                       (union-function-components function)
-                       fits)))
-      (filter-map (lambda (function fit)
-                    (and fit
-                         (not
-                          (is-function-subsumed? function
-                                                 functions))
-                         fit))
-                  (union-function-components function)
-                  fits))))
-
-(define (is-function-subsumed? function functions)
-  (let ((predicate (simple-function-predicate function)))
-    (any (lambda (function*)
-           (let ((predicate*
-                  (simple-function-predicate function*)))
-             (and (not (eqv? predicate* predicate))
-                  (every
-                   (lambda (domain* domain)
-                     (predicate<= domain* domain))
-                   (function-predicate-domains predicate*)
-                   (function-predicate-domains predicate)))))
-         functions)))
-
-(define (union-function? object)
-  (and (applicable-object? object)
-       (let ((object* (applicable-object->object object)))
-         (and (object-union? object*)
-              (every simple-function?
-                     (object-union-components object*))))))
-(register-predicate! union-function? 'union-function)
-(set-predicate<=! union-function? function?)
-
-(define (union-function-components union)
-  (object-union-components (applicable-object->object union)))
-
-(define (union-function-name union)
-  `(union
-    ,@(map simple-function-name
-           (union-function-components union))))
-
-(define (union-function-predicate union)
-  (let ((predicates
-         (map simple-function-predicate
-              (union-function-components union))))
-    (make-function-predicate (apply map
-                                    disjoin
-                                    (map function-predicate-domains
-                                         predicates))
-                             (disjoin*
-                              (map function-predicate-codomain
-                                   predicates)))))
-
-(define-generic-procedure-handler value-restriction
-  (match-args union-function? predicate?)
-  (lambda (value predicate)
-    (let ((components
-           (filter predicate
-                   (union-function-components value))))
-      (and (pair? components)
-           (lambda () (union-function* components))))))

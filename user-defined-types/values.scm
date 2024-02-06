@@ -21,41 +21,15 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 |#
 
+;;; functions
+(define (simple-function-name function)
+  (simple-function-metadata-name
+   (applicable-object->object function)))
+
 ;;;; Restriction of values
-
-(define (value-fit value predicate)
-  (if (predicate value)
-      (lambda () value)
-      (value-restriction value predicate)))
-
-(define value-restriction
-  (simple-generic-procedure 'value-restriction 2
-    (constant-generic-procedure-handler #f)))
-
-(define (combine-fits procedure fits)
-  (lambda ()
-    (procedure
-     (map (lambda (fit) (fit))
-          fits))))
 
 (define (restriction-error value predicate)
   (error "Value doesn't fit predicate:" value predicate))
-
-;;;; Applicable objects
-
-
-(define udp-values-association (make-metadata-association))
-(define applicable-object? (udp-values-association 'has?))
-(define applicable-object-metadata (udp-values-association 'get))
-(define set-applicable-object-metadata! (udp-values-association 'put!))
-
-(register-predicate! applicable-object? 'applicable-object)
-
-(define-record-type (<applicable-object-metadata> make-applicable-object-metadata applicable-object-metadata?)
-  (fields (immutable tag applicable-object-metadata-tag)
-	  (immutable object applicable-object-metadata-object)
-	  (immutable applicator applicable-object-metadata-applicator))
-    )
 
 (define (make-object-applicable predicate object applicator)
   (guarantee procedure? applicator)
@@ -72,27 +46,8 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
                                       applicator))
     applicable-object))
 
-(define (applicable-object-tag object)
-  (applicable-object-metadata-tag
-   (applicable-object-metadata object)))
-
 (define (applicable-object-predicate object)
   (tag->predicate (applicable-object-tag object)))
-
-(define (applicable-object->object object)
-  (applicable-object-metadata-object
-   (applicable-object-metadata object)))
-
-(define-generic-procedure-handler get-tag
-  (match-args applicable-object?)
-  (lambda (object)
-    (applicable-object-metadata-tag
-     (applicable-object-metadata object))))
-
-(define-generic-procedure-handler get-data
-  (match-args applicable-object?)
-  (lambda (object)
-    (get-data (applicable-object->object object))))
 
 (define (strip-applicable-wrapper object)
   (if (applicable-object? object)
@@ -136,23 +91,25 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
   (fields (immutable tag object-union-tag)
 	  (immutable components object-union-components)))
 
-(register-predicate! object-union? 'object-union)
+
+(define values-gt2 (begin
+		     (register-predicate! object-union? 'object-union)
+
+		     (define-generic-procedure-handler get-tag
+		       (match-args object-union?)
+		       object-union-tag)
+		     
+		     (define-generic-procedure-handler value-restriction
+		       (match-args object-union? predicate?)
+		       (lambda (value predicate)
+			 (let ((components
+				(filter predicate
+					(object-union-components value))))
+			   (and (pair? components)
+				(lambda () (object-union* components))))))))
 
 ;; (define-record-printer <object-union>
 ;;   object-union-components)
-
-(define-generic-procedure-handler get-tag
-  (match-args object-union?)
-  object-union-tag)
-
-(define-generic-procedure-handler value-restriction
-  (match-args object-union? predicate?)
-  (lambda (value predicate)
-    (let ((components
-           (filter predicate
-                   (object-union-components value))))
-      (and (pair? components)
-           (lambda () (object-union* components))))))
 
 (define (map-object-union procedure union)
   (object-union*
@@ -169,14 +126,14 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
          (object-union-components u1)
          (object-union-components u2)))
 
-(define-generic-procedure-handler equal*?
-  (match-args object-union? object-union?)
-  object-union=)
-
+(define values-ou (define-generic-procedure-handler equal*?
+		    (match-args object-union? object-union?)
+		    object-union=))
+
 ;;;; Various debugging tools for tagged data
 
-(define (pt object)
-  (pp (rewrite-tags object)))
+;; (define (pt object)
+;;   (pp (rewrite-tags object)))		;估计是pretty-print
 
 (define (rewrite-tags object)
   (cond ((tag? object)
@@ -205,8 +162,8 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
          (vector-map rewrite-tags object))
         (else object)))
 
-(define (pto object)
-  (pp (tags-of object)))
+;; (define (pto object)
+;;   (pp (tags-of object)))
 
 (define (tags-of object)
   (cond ((tag? object)

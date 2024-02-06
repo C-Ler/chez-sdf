@@ -23,6 +23,19 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 ;;;; An adventure game at MIT
 
+#| load 本文件 (start-adventure '爱宠莎莎) (go 'west) (go 'east)
+course-6-frosh picks up course-6-froshbag
+Exception in error:wrong-type-argument: wrong argument type, expected #[#{simple-tag lc8mwm3c886i9cm630dumuiew-62} #[#{<tag-shared> lc8mwm3c886i9cm630dumuiew-63} list #<procedure list?> #<procedure constructor at tagging.scm:2680> #<procedure at tagging.scm:2989> #<procedure at collections.scm:1254>]]and caller value: with irritants (#<void> #<void>)
+
+error:wrong-type-argument 被封装成其它error过程时,第二个参数传入了(predicate-description predicate) ,所以出现上面这种情况十分反常 原因不明...  2024年1月29日21:13:11
+应该是predicate-description 返回的,但是不知道是传入了哪个参数变成这样的  2024年1月29日21:15:45
+应该是传入了gp-list?,没发现哪里调用了不带n:的list?....  2024年1月29日21:19:45
+|#
+
+#|
+substrate set-up! error-generic-procedure-handler: Inapplicable generic procedure: with irritants (get-tag-shared (#[#{simple-tag ggb5i5qobi1g1l6270n43mnon-63} #[...]]))
+|#
+
 (library-directories 
  '("D:\\lib" "D:\\lib\\thunderchez-trunk"
    "D:\\lib" "D:\\lib\\scheme-lib\\packages"
@@ -37,8 +50,8 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
  (srfi s128 comparators)
  (base-ex simple-ex)
  (sdf sdf)
+ ;; (sdf sdf-udp)
  )
-
 
 ;; (gp-pred-md-init)        ;这个同tags.scm 注册谓词的方式矛盾,不能同时用 2024年1月21日10:52:21
 
@@ -48,12 +61,10 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 (include "templates.scm")
 (include "values.scm")
 (include "functions.scm")
-(include "tags.scm")
+;; (include "tags.scm")
 
 (include "adventure-substrate.scm")   	;其中的define-record-printer在utlis给出实现,这个过程的实现调用了standard-print-method,是mit的过程
 (include "adventure-objects.scm")
-
-
 
 (define the-clock)
 (define all-places)
@@ -134,7 +145,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
       ((not (< i ticks)))
     (tick! (get-clock)))
   'done)
-
+
 ;;; Support for UI
 
 (define (here)
@@ -170,7 +181,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
       '("here")
       (list "in" (local-possessive person-or-place) "bag")))
 
-(define (local-possessive person)
+(define (local-possessive person)	;返回人名  2024年1月28日18:02:59
   (if (eqv? person my-avatar)
       "Your"
       (possessive person)))
@@ -359,3 +370,4 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 ;; (create-students places-mit)
 
+(start-adventure '爱宠莎莎)

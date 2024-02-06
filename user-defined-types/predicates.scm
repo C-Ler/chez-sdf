@@ -23,15 +23,9 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 ;;;; Predicate registration
 
-(define predicate->tag get-predicate-metadata) ;从metadata实现的pred中取东西出来,给common的重命名了.  2024年1月10日21:39:59
-
-(define (tag-data predicate data)
-  ((predicate-constructor predicate) data))
 
 ;; Needed by code in common
-(define (register-predicate! predicate name) ;predicate-metadata.scm 当中已经定义过了,这里覆盖了?? 2024年1月20日18:30:17
-  (guarantee procedure? predicate)
-  (make-simple-predicate name predicate tagging-strategy:never))
+
 
 ;; Needed by code in common.
 (define (register-compound-predicate! joint-predicate operator ;这个也不同于predicate-metadata.scm 2024年1月20日18:30:58
@@ -45,20 +39,22 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
     operator
     (map predicate->tag components))))
 
-(define (make-simple-predicate name data-test tagging-strategy)
-  (tag->predicate
-   (make-simple-tag name data-test tagging-strategy)))
-
 (define (simple-abstract-predicate name data-test)
   (make-simple-predicate name data-test tagging-strategy:always))
-
-(define have-compound-operator-registrar?)
-(define get-compound-operator-registrar)
-(define define-compound-operator-registrar)
-(let ((store (make-alist-store eq?)))
-  (set! have-compound-operator-registrar? (store 'has?))
-  (set! get-compound-operator-registrar (store 'get))
-  (set! define-compound-operator-registrar (store 'put!)))
+
+(define udp-predicates-store (make-alist-store eq?))
+
+(define have-compound-operator-registrar? (udp-predicates-store 'has?))
+(define get-compound-operator-registrar (udp-predicates-store 'get))
+(define define-compound-operator-registrar (udp-predicates-store 'put!))
+
+(define (make-compound-tag name data-test tagging-strategy
+                           operator components)
+  (%invoke-tagging-strategy tagging-strategy name data-test
+                            (lambda (shared)
+                              (%make-compound-tag shared
+                                                  operator
+                                                  components))))
 
 (define (standard-compound-tag data-test operator components)
   (make-compound-tag (cons operator (map tag-name components))
@@ -72,21 +68,22 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
     (lambda (data-test operator tags)
       ;; (declare (ignore data-test operator))
       tags)
-    (lambda (data-test operator tags)
-      (standard-compound-tag data-test operator tags))))
-;;; 下面几个 被' 的都是 common\predicates 的
-(define-compound-operator-registrar 'is-list-of
-  (make-listish-memoizer))
+    (lambda (data-test operator tags)parametric-tag?
+	    (standard-compound-tag data-test operator tags))))
 
-(define-compound-operator-registrar 'is-non-empty-list-of
-  (make-listish-memoizer))
+(define pred-cor (begin
+		  (define-compound-operator-registrar 'is-list-of
+		    (make-listish-memoizer))
 
-(define-compound-operator-registrar 'is-pair-of
-  (make-listish-memoizer))
+		  (define-compound-operator-registrar 'is-non-empty-list-of
+		    (make-listish-memoizer))
 
-(define-compound-operator-registrar 'complement
-  (make-listish-memoizer))
-
+		  (define-compound-operator-registrar 'is-pair-of
+		    (make-listish-memoizer))
+
+		  (define-compound-operator-registrar 'complement
+		    (make-listish-memoizer))))
+
 (define (joinish wrap-constructor)
   (let ((memoizer
          (simple-lset-memoizer eq?
@@ -120,61 +117,43 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
                (memoizer data-test operator tags
                          post-process))))))))
 
-(define-compound-operator-registrar 'disjoin
-  (joinish
-   (lambda (tags continue)
-     (or (find top-tag? tags)
-         (continue
-          (lambda (joint-tag tags)
-            (for-each (lambda (tag)
-                        (set-tag<=! tag joint-tag))
-                      tags)))))))
+(define (true-tag<= tag1 tag2) ;; (declare (ignore tag1 tag2))
+  #t)
 
-(define-compound-operator-registrar 'conjoin
-  (joinish
-   (lambda (tags continue)
-     (or (find bottom-tag? tags)
-         (continue
-          (lambda (joint-tag tags)
-            (for-each (lambda (tag)
-                        (set-tag<=! joint-tag tag))
-                      tags)))))))
-
-;;;; Generic predicate operations
+(define any-object? (conjoin))
+(define no-object? (disjoin))
 
-;; Needed by code in common.
-(define (predicate-name predicate)
-  (tag-name (predicate->tag predicate)))
+(define top-tag (predicate->tag any-object?))
+(define bottom-tag (predicate->tag no-object?))
 
-(define (predicate-constructor predicate)
-  (tag-constructor (predicate->tag predicate)))
+(define (top-tag? object) (eqv? top-tag object))
+(define (non-top-tag? object) (not (top-tag? object)))
 
-(define (predicate-accessor predicate)
-  (tag-accessor (predicate->tag predicate))) ;接受一个(tagged-data-data from),返回一个返回过程的过程,返回的过程被期望接受一个参数,但是实际上接受了两个...
+(define (bottom-tag? object) (eqv? bottom-tag object))
+(define (non-bottom-tag? object) (not (bottom-tag? object)))
 
-(define (predicate-supersets predicate)
-  (map tag->predicate
-       (get-tag-supersets (predicate->tag predicate))))
+(define pred-cor (begin
+		   (define-compound-operator-registrar 'disjoin
+		     (joinish
+		      (lambda (tags continue)
+			(or (find top-tag? tags)
+			    (continue
+			     (lambda (joint-tag tags)
+			       (for-each (lambda (tag)
+					   (set-tag<=! tag joint-tag))
+					 tags)))))))
 
-(define (all-predicate-supersets predicate)
-  (map tag->predicate
-       (get-all-tag-supersets (predicate->tag predicate))))
+		   (define-compound-operator-registrar 'conjoin
+		     (joinish
+		      (lambda (tags continue)
+			(or (find bottom-tag? tags)
+			    (continue
+			     (lambda (joint-tag tags)
+			       (for-each (lambda (tag)
+					   (set-tag<=! joint-tag tag))
+					 tags)))))))
+		   ))
 
-(define (predicate<= predicate1 predicate2)
-  (tag<= (predicate->tag predicate1)
-         (predicate->tag predicate2)))
-
-(define (predicate>= predicate1 predicate2)
-  (predicate<= predicate2 predicate1))
-
-(define (predicate= predicate1 predicate2)
-  (tag= (predicate->tag predicate1)
-        (predicate->tag predicate2)))
-
-(define (set-predicate<=! predicate superset)
-  (set-tag<=! (predicate->tag predicate)
-              (predicate->tag superset)))
-
 ;;;; Simple predicates
 
 (define (simple-predicate? object)
@@ -203,133 +182,11 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 ;;;; Parametric predicates
 
-(define (parametric-predicate? object)
-  (and (predicate? object)
-       (parametric-tag? (predicate->tag object))))
-
-(define (parametric-predicate-template predicate)
-  (parametric-tag-template (predicate->tag predicate)))
-
-;;;; Basic tag structure
-
-(define tag?
-  (simple-generic-procedure 'tag? 1
-    (constant-generic-procedure-handler #f)))
-
-(define get-tag-shared
-  (simple-generic-procedure 'get-tag-shared 1 #f))
-
-(define (define-tag-type predicate get-shared)
-  (define-generic-procedure-handler tag? (match-args predicate)
-    (lambda (object)
-      ;; (declare (ignore object))
-      #t))
-  (define-generic-procedure-handler get-tag-shared
-                                    (match-args predicate)
-    get-shared))
-
 ;; (define (define-tag-record-printer record-type)
 ;;   (define-record-printer record-type
 ;;     (lambda (tag) (list (tag-name tag)))))
 
-(define (%invoke-tagging-strategy tagging-strategy name data-test
-                                  maker)
-  (tagging-strategy
-   name
-   data-test
-   (lambda (predicate constructor accessor)
-     (let ((tag
-            (maker
-             (make-tag-shared name predicate constructor
-                              accessor))))
-       (set-predicate-metadata! predicate tag)
-       tag))))
-
-(define (make-tag-shared name predicate constructor accessor)
-  (guarantee procedure? predicate 'make-tag-shared)
-  (guarantee procedure? constructor 'make-tag-shared)
-  (guarantee procedure? accessor 'make-tag-shared)
-  (%make-tag-shared name predicate constructor accessor
-                    (make-weak-eq-set)))
-
-(define-record-type (<tag-shared> %make-tag-shared tag-shared?)
-  (fields (immutable name tag-shared-name)
-	   (immutable predicate tag-shared-predicate)
-	   (immutable constructor tag-shared-constructor)
-	   (immutable accessor tag-shared-accessor)
-	  (immutable supersets tag-shared-supersets)
-	  )
-  )
-
-(define (make-simple-tag name data-test tagging-strategy)
-  (%invoke-tagging-strategy tagging-strategy name data-test
-                            %make-simple-tag))
-
-(define-record-type (simple-tag %make-simple-tag simple-tag?)
-  (fields (immutable shared simple-tag-shared)))
-
-(define-tag-type simple-tag? simple-tag-shared)
-;; (define-tag-record-printer <simple-tag>)
-
-(define (make-compound-tag name data-test tagging-strategy
-                           operator components)
-  (%invoke-tagging-strategy tagging-strategy name data-test
-                            (lambda (shared)
-                              (%make-compound-tag shared
-                                                  operator
-                                                  components))))
-
-(define-record-type (<compound-tag> %make-compound-tag compound-tag?)
-    (fields (immutable shared compound-tag-shared) (immutable operator compound-tag-operator) (immutable components compound-tag-components))
-    
-  
-  
-  )
-
-(define-tag-type compound-tag? compound-tag-shared)
-;; (define-tag-record-printer <compound-tag>)
-
-(define (make-parametric-tag name data-test tagging-strategy
-                             template bindings)
-  (%invoke-tagging-strategy tagging-strategy name data-test
-                            (lambda (shared)
-                              (%make-parametric-tag shared
-                                                    template
-                                                    bindings))))
-
-(define-record-type (<parametric-tag> %make-parametric-tag parametric-tag?)
-  (fields (immutable shared parametric-tag-shared) (immutable template parametric-tag-template) (immutable bindings parametric-tag-bindings))
-    
-  
-  
-  )
-
-(define-tag-type parametric-tag? parametric-tag-shared)
-;; (define-tag-record-printer <parametric-tag>)
-
 ;;;; Generic tag operations
-
-(define (tag-name tag)
-  (tag-shared-name (get-tag-shared tag)))
-
-(define (tag->predicate tag)
-  (tag-shared-predicate (get-tag-shared tag)))
-
-(define (tag-constructor tag)
-  (tag-shared-constructor (get-tag-shared tag)))
-
-(define (tag-accessor tag)
-  (tag-shared-accessor (get-tag-shared tag)))
-
-(define (tag-supersets tag)
-  (tag-shared-supersets (get-tag-shared tag)))
-
-(define (tags->predicates tags)
-  (map tag->predicate tags))
-
-(define (get-tag-supersets tag)
-  (((tag-supersets tag) 'get-elements)))
-
 (define (get-all-tag-supersets tag)
   (let loop ((queue (list tag)) (supersets '()))
     (if (pair? queue)
@@ -344,136 +201,107 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
                       (append new-sets supersets))
                 (loop queue supersets))))
         supersets)))
-
-(define (set-tag<=! tag superset)
-  (if (tag>= tag superset)
-      (error 'set-tag<=! "Not allowed to create a superset loop:"
-             tag superset))
-  (if (not (tag<= tag superset))
-      (((tag-supersets tag) 'add-element!) superset))
-  (hash-table-clear! tag<=-cache))
 
-(define (tag= tag1 tag2)
-  (guarantee tag? tag1)
-  (guarantee tag? tag2)
-  (eqv? tag1 tag2))
-
-(define (tag<= tag1 tag2)		;这个东西..  2024年1月20日22:04:07
-  (guarantee tag? tag1)
-  (guarantee tag? tag2)
-  (cached-tag<= tag1 tag2))
-
-(define (tag>= tag1 tag2)
-  (tag<= tag2 tag1))
-
-(define tag<=-cache
-  (make-equal-hash-table))
-
-(define (cached-tag<= tag1 tag2)
-  (hash-table-intern! tag<=-cache
-                      (cons tag1 tag2)
-                      (lambda () (uncached-tag<= tag1 tag2))))
-
-(define (uncached-tag<= tag1 tag2)
-  (or (eqv? tag1 tag2)
-      (generic-tag<= tag1 tag2)
-      (any (lambda (tag)
-             (cached-tag<= tag tag2))
-           (get-tag-supersets tag1))))
+(define (all-predicate-supersets predicate)
+  (map tag->predicate
+       (get-all-tag-supersets (predicate->tag predicate))))
 
 (define (cached-tag>= tag1 tag2)
   (cached-tag<= tag2 tag1))
-
-(define (false-tag<= tag1 tag2) ;; (declare (ignore tag1 tag2)) 
-  #f)
-(define (true-tag<= tag1 tag2) ;; (declare (ignore tag1 tag2))
-  #t)
-
-(define (top-tag? object) (eqv? top-tag object))
-(define (non-top-tag? object) (not (top-tag? object)))
-
-(define (bottom-tag? object) (eqv? bottom-tag object))
-(define (non-bottom-tag? object) (not (bottom-tag? object)))
 
 ;; These will be modified below.
-(define top-tag #f)
-(define bottom-tag #f)
-
-(define generic-tag<=
-  (simple-generic-procedure 'generic-tag<= 2 false-tag<=))
 
 (define (define-tag<= predicate1 predicate2 handler)
   (define-generic-procedure-handler generic-tag<=
     (match-args predicate1 predicate2)
     handler))
 
-(define-tag<= bottom-tag? tag? true-tag<=)
-(define-tag<= tag? top-tag? true-tag<=)
-
-(define-tag<= non-bottom-tag? bottom-tag? false-tag<=)
-(define-tag<= top-tag? non-top-tag? false-tag<=)
-
-(define-tag<= parametric-tag? parametric-tag?
-  (lambda (tag1 tag2)
-    (and (eqv? (parametric-tag-template tag1)
-               (parametric-tag-template tag2))
-         (every (lambda (bind1 bind2)
-                  (let ((tags1 (parameter-binding-values bind1))
-                        (tags2 (parameter-binding-values bind2)))
-                    (and (n:= (length tags1) (length tags2))
-                         (every (case (parameter-binding-polarity
-                                       bind1)
-                                  ((+) cached-tag<=)
-                                  ((-) cached-tag>=)
-                                  (else tag=))
-                                tags1
-                                tags2))))
-                (parametric-tag-bindings tag1)
-                (parametric-tag-bindings tag2)))))
-
-(define-tag<= compound-tag? compound-tag?
-  (lambda (tag1 tag2)
-    (cond ((and (eq? 'disjoin (compound-tag-operator tag1))
-                (eq? 'disjoin (compound-tag-operator tag2)))
-           (every (lambda (component1)
-                    (any (lambda (component2)
-                           (tag<= component1 component2))
-                         (compound-tag-components tag2)))
-                  (compound-tag-components tag1)))
-          ;; TODO(cph): add more rules here.
-          (else #f))))
-
+(define (tag-data predicate data)
+  ((predicate-constructor predicate) data))
 ;;;; Registrations for this file
 
 ;; These must be the first registrations!
-(define any-object? (conjoin))
-(define no-object? (disjoin))
+
 
 ;; Now that we've got those objects, we can properly set the top
 ;; and bottom tags.
-(set! top-tag (predicate->tag any-object?))
-(set! bottom-tag (predicate->tag no-object?))
+;; (set! top-tag (predicate->tag any-object?))
+;; (set! bottom-tag (predicate- >tag no-object?))
+(define (maybe-register-compound-predicate! datum-test
+                                            operator operands)
+  (if (every predicate? operands)
+      (register-compound-predicate! datum-test operator operands)
+      datum-test))
 
-(register-predicate! predicate? 'predicate)
-(register-predicate! simple-predicate? 'simple-predicate)
-(register-predicate! compound-predicate? 'compound-predicate)
-(register-predicate! parametric-predicate? 'parametric-predicate)
-(register-predicate! disjunction? 'disjunction)
-(register-predicate! conjunction? 'conjunction)
+(define (disjoin* predicates)
+  (maybe-register-compound-predicate!
+   (lambda (object)
+     (any (lambda (predicate)
+            (predicate object))
+          predicates))
+   'disjoin
+   predicates))
 
-(set-predicate<=! simple-predicate? predicate?)
-(set-predicate<=! compound-predicate? predicate?)
-(set-predicate<=! parametric-predicate? predicate?)
-(set-predicate<=! disjunction? compound-predicate?)
-(set-predicate<=! conjunction? compound-predicate?)
+(define pred-rp (begin
 
-(register-predicate! tag? 'tag)
-(register-predicate! simple-tag? 'simple-tag)
-(register-predicate! compound-tag? 'compound-tag)
-(register-predicate! parametric-tag? 'parametric-tag)
+		  (define-tag<= bottom-tag? tag? true-tag<=)
+		  (define-tag<= tag? top-tag? true-tag<=)
 
-(set-predicate<=! simple-tag? tag?)
-(set-predicate<=! compound-tag? tag?)
-(set-predicate<=! parametric-tag? tag?)
+		  (define-tag<= non-bottom-tag? bottom-tag? false-tag<=)
+		  (define-tag<= top-tag? non-top-tag? false-tag<=)
 
-(register-predicate! tagged-data? 'tagged-data)
+		  (define-tag<= parametric-tag? parametric-tag?
+		    (lambda (tag1 tag2)
+		      (and (eqv? (parametric-tag-template tag1)
+				 (parametric-tag-template tag2))
+			   (every (lambda (bind1 bind2)
+				    (let ((tags1 (parameter-binding-values bind1))
+					  (tags2 (parameter-binding-values bind2)))
+				      (and (= (length tags1) (length tags2))
+					   (every (case (parameter-binding-polarity
+							 bind1)
+						    ((+) cached-tag<=)
+						    ((-) cached-tag>=)
+						    (else tag=))
+						  tags1
+						  tags2))))
+				  (parametric-tag-bindings tag1)
+				  (parametric-tag-bindings tag2)))))
+
+		  (define-tag<= compound-tag? compound-tag?
+		    (lambda (tag1 tag2)
+		      (cond ((and (eq? 'disjoin (compound-tag-operator tag1))
+				  (eq? 'disjoin (compound-tag-operator tag2)))
+			     (every (lambda (component1)
+				      (any (lambda (component2)
+					     (tag<= component1 component2))
+					   (compound-tag-components tag2)))
+				    (compound-tag-components tag1)))
+			    ;; TODO(cph): add more rules here.
+			    (else #f))))
+		  
+		  (register-predicate! predicate? 'predicate)
+		  (register-predicate! simple-predicate? 'simple-predicate)
+		  (register-predicate! compound-predicate? 'compound-predicate)
+
+		  (register-predicate! disjunction? 'disjunction)
+		  (register-predicate! conjunction? 'conjunction)
+
+		  (set-predicate<=! simple-predicate? predicate?)
+		  (set-predicate<=! compound-predicate? predicate?)
+		  (set-predicate<=! parametric-predicate? predicate?)
+		  (set-predicate<=! disjunction? compound-predicate?)
+		  (set-predicate<=! conjunction? compound-predicate?)
+
+		  (register-predicate! tag? 'tag)
+
+		  (register-predicate! simple-tag? 'simple-tag)
+		  (register-predicate! compound-tag? 'compound-tag)
+		  (register-predicate! parametric-tag? 'parametric-tag)
+
+		  (set-predicate<=! simple-tag? tag?)
+
+		  (set-predicate<=! compound-tag? tag?)
+		  (set-predicate<=! parametric-tag? tag?)
+
+		  (register-predicate! tagged-data? 'tagged-data)))

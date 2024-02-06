@@ -130,7 +130,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
       (if (default-object? value)
           (begin
             (if (not (property-optional? property))
-                (error "Missing required property:"
+                (error 'parse-plist "Missing required property:"
                        (property-name property)
                        plist))
             ((property-default-supplier property) lookup-value))
@@ -141,7 +141,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
           (cons property (lookup-value property)))
         properties)))
 
-(define set-up!
+(define set-up!				;error-generic-procedure-handler: Inapplicable generic procedure: with irritants (get-tag-shared (#[#{simple-tag ggb5i5qobi1g1l6270n43mnon-63} #[...]]))
   (chaining-generic-procedure 'set-up! 1
     (constant-generic-procedure-handler #f)))
 
@@ -164,7 +164,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
              (map car bindings)
              (let ((p (assv property bindings)))
                (if (not p)
-                   (error "Unknown property:" property))
+                   (error 'make-instance-data "Unknown property:" property))
                (lambda* (#:optional new-value)
 			(if (default-object? new-value)
 			    (cdr p)
@@ -326,7 +326,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 						      (match-args message? object?)
   (let ((scr (make-screen 'name 'the-screen))) ;原本只是个#f,接着报错了,怀疑是捡起东西后提示某物到哪过于简陋 2024年1月23日21:49:58
     (lambda (message thing)
-      ;; (display (type-properties thing))
+      (display-message (type-properties thing))
       (display-message message (get-port scr)))))))
 
 (define (narrate! message person-or-place)
