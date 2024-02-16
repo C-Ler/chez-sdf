@@ -20,8 +20,6 @@ You should have received a copy of the GNU General Public License
 along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 |#
-
-
 
 ;;; The resulting predicate represents a "function space" for the
 ;;; given sets.
@@ -30,8 +28,6 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 (define function-predicate?
   (predicate-template-predicate function-template))
-
-
 
 (define (function-predicate-arity predicate)
   (length (function-predicate-domains predicate)))
@@ -211,10 +207,9 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 		  (match-args union-function? predicate?)
 		  (lambda (value predicate)
 		    (let ((components
-			   (filter predicate
+    		   (filter predicate
 				   (union-function-components value))))
 		      (and (pair? components)
 			   (lambda () (union-function* components)))))))
 
 ;;; functions
-

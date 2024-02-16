@@ -71,7 +71,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
     (lambda (data-test operator tags)parametric-tag?
 	    (standard-compound-tag data-test operator tags))))
 
-(define pred-cor (begin
+(define pred-llpc (begin
 		  (define-compound-operator-registrar 'is-list-of
 		    (make-listish-memoizer))
 
@@ -232,15 +232,6 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
   (if (every predicate? operands)
       (register-compound-predicate! datum-test operator operands)
       datum-test))
-
-(define (disjoin* predicates)
-  (maybe-register-compound-predicate!
-   (lambda (object)
-     (any (lambda (predicate)
-            (predicate object))
-          predicates))
-   'disjoin
-   predicates))
 
 (define pred-rp (begin
 

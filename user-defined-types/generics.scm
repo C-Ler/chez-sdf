@@ -41,7 +41,8 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 ;;; predicates的部分 2024年1月30日22:35:04
 ;;;; Basic tag structure
-(define predicate->tag get-predicate-metadata) ;common 中 pred-md-get 的简单替换 2024年2月3日21:18:28
+;;; 原predicate的简单替换 2024年1月30日21:31:23
+(define predicate->tag get-predicate-metadata) ;common 中 pred-md-get 的简单替换 从metadata实现的pred中取东西出来.  2024年1月10日21:39:59
 
 (define tag?
   (simple-generic-procedure 'tag? 1
@@ -98,6 +99,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 (define (%invoke-tagging-strategy tagging-strategy name data-test
                                   maker)
+  ;; Exception: invalid context for definition (define rtd ($make-record-type-descriptor #!base-rtd (quote simple-tag) #f 2024年2月8日20:25:47
   (tagging-strategy			;比如tagging-strategy:never,传入构造器和参数,返回构造的结果,即tag
    name
    data-test
@@ -123,14 +125,16 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
   (fields (immutable shared parametric-tag-shared) (immutable template parametric-tag-template) (immutable bindings parametric-tag-bindings))
   )
 
-(define-tag-type parametric-tag? parametric-tag-shared)
+(define pt
+  (define-tag-type parametric-tag? parametric-tag-shared))
 ;; (define-tag-record-printer <parametric-tag>)
 
 (define-record-type (<compound-tag> %make-compound-tag compound-tag?)
     (fields (immutable shared compound-tag-shared) (immutable operator compound-tag-operator) (immutable components compound-tag-components))
     )
 
-(define-tag-type compound-tag? compound-tag-shared)
+(define ct
+  (define-tag-type compound-tag? compound-tag-shared))
 ;; (define-tag-record-printer <compound-tag>)
 
 (define (make-parametric-tag name data-test tagging-strategy
@@ -175,7 +179,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 ;;; 用来存储标签顺序关系的
 (define (false-tag<= tag1 tag2) ;; (declare (ignore tag1 tag2)) 
   #f)
-
+ 
 (define generic-tag<=
   (simple-generic-procedure 'generic-tag<= 2 false-tag<=))
 
@@ -365,6 +369,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 (define temp-tp (register-predicate! template-pattern? 'template-pattern))
 
+
 (define (make-predicate-template name pattern tagging-strategy
                                  make-data-test)
   (guarantee template-pattern? pattern)
@@ -511,6 +516,235 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
         (error 'apply-union-function "Inapplicable functio" function args))
     (fit)))
 
+;;; taggs
+;;; taggs 的部分,得插在tagging的中间... 2024年2月1日21:22:07
+;;; lib化之后得放在这里 2024年2月15日11:13:12
+(define-record-type (<tagged-data> %make-tagged-data tagged-data?)
+  (fields (immutable tag tagged-data-tag) (immutable data tagged-data-data))
+  )
+
+(define (tagging-strategy:optional name data-test make-tag) ;data的tag和给定tag eq?时才加tag  2024年1月20日17:45:26
+
+  (define (constructor data)
+    (if (not (data-test data))
+        (error 'tagging-strategy:optional (string-append "Ill-formed data for " (symbol->string name) ":")
+               data))
+    (if (eq? tag (get-tag data))	;这个tag哪来的? 2024年1月20日17:45:16
+        data
+        (%make-tagged-data tag data)))
+
+  (define (predicate object)
+    (or (and (tagged-data? object)
+             (tag<= (tagged-data-tag object) tag)
+             (data-test (tagged-data-data object)))
+        (data-test object)))
+
+  (define (accessor object)
+    (if (tagged-data? object)
+        (tagged-data-data object)
+        object))
+
+  (define tag
+    (make-tag predicate constructor accessor))
+
+  tag)
+
+(define (primitive-predicate name data-test)
+  (if (not (predicate? data-test))
+      (register-predicate! data-test name ;; (symbol 'n: name) 感觉没必要加n: 2024年1月19日21:00:00
+			   ))
+  (let ((predicate
+         (make-simple-predicate name data-test
+                                tagging-strategy:optional)))
+    (set-predicate<=! data-test predicate) ;这个调用了一个348行的 set-tag<=! 在下面几个gp重定义谓词中,从number?开始就被error:not-a-type捕捉到异常 2024年1月20日12:17:38
+    predicate))
+
+;;;; Standard predicates
+
+;;; This extends base-predicate to work for tagged data.  The
+;;; constructor only wraps the data when the implementation tag
+;;; is different.
+
+
+
+;;; 下面的谓词前面全部都去掉了 n: 2024年1月19日21:00:45
+;;; 然后因为define complex? 这种操作会导致complex?没有bound 前面全部加了gp- 2024年1月19日21:17:15
+;; (define (boolean? b)
+;;   (or (eq? #t b) (eq? #f b)))
+
+(define gp-boolean?
+  (primitive-predicate 'boolean boolean?))
+
+(define gp-complex?
+  (primitive-predicate 'complex complex?))
+
+(define gp-exact-integer?
+  (primitive-predicate 'exact-integer exact-integer?))
+
+;; (define gp-exact-rational?
+;;   (primitive-predicate 'exact-rational rational?))   mit才有的定义 2024年1月19日21:21:15
+
+(define gp-inexact-real?
+  (primitive-predicate 'inexact-real flonum?))
+
+(define gp-integer?
+  (primitive-predicate 'integer integer?))
+
+(define gp-null?
+  (primitive-predicate 'null null?))
+
+(define gp-pair?
+  (primitive-predicate 'pair pair?))
+
+(define gp-rational?
+  (primitive-predicate 'rational rational?))
+
+(define gp-real?
+  (primitive-predicate 'real real?))
+
+(define gp-string?
+  (primitive-predicate 'string string?))
+
+(define gp-vector?
+  (primitive-predicate 'vector vector?))
+
+;;; 下面两个去掉了exact的部分  2024年1月19日21:24:47
+(define gp-exact-nonnegative-integer?
+  (primitive-predicate 'exact-nonnegative-integer
+                       nonnegative?))
+
+(define gp-exact-positive-integer?
+  (primitive-predicate 'exact-positive-integer
+                       positive?))
+
+(define gp-list?
+  (primitive-predicate 'list list?))
+
+(define gp-non-empty-list?
+  (primitive-predicate 'non-empty-list non-empty-list?))
+
+(define gp-number?
+  (primitive-predicate 'number number?)) ;number symbol? boolean? 这几个在predicate-metadata.scm 已经注册过了,由于predicates文件中的tag<= 报错 2024年1月19日21:43:45
+
+(define gp-symbol?
+  (primitive-predicate 'symbol symbol?))
+
+(define taggs-relation (begin
+			 (set-predicate<=! gp-complex? gp-number?)
+			 ;; (set-predicate<=! gp-exact-integer? gp-integer?)
+			 (set-predicate<=! gp-exact-nonnegative-integer? gp-integer?)
+			 (set-predicate<=! gp-exact-positive-integer? gp-integer?)
+			 ;; (set-predicate<=! gp-exact-rational? gp-rational?)
+			 (set-predicate<=! gp-inexact-real? gp-real?)
+			 (set-predicate<=! gp-integer? gp-rational?)
+			 (set-predicate<=! gp-non-empty-list? gp-list?)
+			 (set-predicate<=! gp-null? gp-list?)
+			 (set-predicate<=! gp-rational? gp-real?)
+			 (set-predicate<=! gp-real? gp-complex?)
+
+			 (register-predicate! procedure? 'procedure)))
+
+
+;;; taggs的部分 2024年1月30日21:13:09
+(define %object-tag-map
+  (make-key-weak-eqv-hash-table))
+
+(define (implementation-tag-helper pred name)
+  (hash-table-intern! %object-tag-map name (lambda () (predicate->tag (register-predicate!  pred name)))))
+
+(define implementation-tag		 ;由于没找到chez及R6RS获取obj type的方法,只能手撸一个 2024年1月21日17:33:25
+  (let ((boolean-tag (predicate->tag gp-boolean?))
+        (null-tag (predicate->tag gp-null?)))
+    (lambda (object)
+      (cond ((eq? object #t) boolean-tag)
+            ((eq? object '()) null-tag)
+	    ((pair? object) (implementation-tag-helper pair? 'pair))
+	    ((integer? object) (implementation-tag-helper integer? 'integer))
+	    ((rational? object) (implementation-tag-helper rational? 'rational))
+	    ((real? object) (implementation-tag-helper real? 'real))
+	    ((complex? object) (implementation-tag-helper complex? 'complex))
+	    ((number? object) (implementation-tag-helper number? 'number))
+	    ((char? object) (implementation-tag-helper char? 'char))
+	    ((string? object) (implementation-tag-helper string? 'string))
+	    ((vector? object) (implementation-tag-helper vector? 'vector))
+	    ((symbol? object) (implementation-tag-helper symbol? 'symbol))
+	    ((procedure? object) (implementation-tag-helper procedure? 'procedure))
+	    ((bytevector? object) (implementation-tag-helper bytevector? 'bytevector))
+	    ((hashtable? object) (implementation-tag-helper hashtable? 'hashtable))
+	    ((record? object) (implementation-tag-helper record? (record-type-name (record-rtd object))))
+	    (else
+             (error 'implementation-tag "Unkown implementation type:" object))))))
+
+(define (%predefine-tags predicate name . type-names)
+  ;; (declare (ignore name))
+  (for-each (lambda (type-name)
+              (hashtable-set! %object-tag-map
+                               type-name
+                               (predicate->tag predicate)))
+            type-names))
+
+(define taggs-pre (begin
+		     (%predefine-tags gp-boolean? 'boolean 'false)
+		     (%predefine-tags gp-complex? 'complex 'recnum)
+		     (%predefine-tags gp-exact-integer? 'exact-integer 'bignum 'fixnum)
+		     ;; (%predefine-tags gp-exact-rational? 'exact-rational 'ratnum)
+		     (%predefine-tags gp-inexact-real? 'real 'flonum)
+		     (%predefine-tags gp-pair? 'pair 'pair)
+		     (%predefine-tags procedure? 'procedure
+				      'extended-procedure 'procedure 'entity
+				      'primitive 'compiled-entry)
+		     (%predefine-tags gp-string? 'string 'string)
+		     (%predefine-tags gp-symbol? 'symbol
+				      'interned-symbol 'uninterned-symbol)
+		     (%predefine-tags gp-vector? 'vector 'vector)
+))
+
+
+;;; tagging
+(define get-tag				;tag的gp  2024年1月20日13:33:13
+  (simple-generic-procedure 'get-tag 1
+    (lambda (object)
+      (implementation-tag object))))
+
+(define (get-predicate object)
+  (tag->predicate (get-tag object)))
+
+;;; values
+(define-record-type (<object-union> %make-object-union object-union?)
+  (fields (immutable tag object-union-tag)
+	  (immutable components object-union-components)))
+
+(define (make-object-union components)
+  (%make-object-union (predicate->tag
+                       (disjoin*
+                        (map get-predicate components)))
+                      components))
+
+(define (object-union* components)
+  (guarantee list? components)
+  (if (and (pair? components)
+           (null? (cdr components)))
+      (car components)
+      (let ((components
+             (delete-duplicates
+              (append-map (lambda (object)
+                            (if (object-union? object)
+                                (object-union-components object)
+                                (list object)))
+                          components)
+              eqv?)))
+        (cond ((not (pair? components))
+               (make-object-union components))
+              ((null? (cdr components))
+               (car components))
+              ((every function? components)
+               (union-function* components))
+              (else
+               (make-object-union components))))))
+
+(define (object-union . components)
+  (object-union* components))
+
 (define (union-function-apply-fit function args)
   (let ((fits (union-function-component-fits function args)))
     (and (pair? fits)
@@ -596,7 +830,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
               (every simple-function?
                      (object-union-components object*))))))
 
-(define func-uf (register-predicate! union-function? 'union-function))
+(define func-uf? (register-predicate! union-function? 'union-function))
 
 (define (function? object)
   (or (simple-function? object)
@@ -688,3 +922,5 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 ;; (set! make-default-dispatch-store	;替换了原本common中的该过程,但是没被引用,注释掉好了 2024年1月30日21:54:20
 ;;   make-cached-most-specific-dispatch-store)
+
+;; (测试输出 "generic-end")

@@ -56,42 +56,6 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 ;;;; Unions of objects
 
-(define (object-union . components)
-  (object-union* components))
-
-(define (object-union* components)
-  (guarantee list? components)
-  (if (and (pair? components)
-           (null? (cdr components)))
-      (car components)
-      (let ((components
-             (delete-duplicates
-              (append-map (lambda (object)
-                            (if (object-union? object)
-                                (object-union-components object)
-                                (list object)))
-                          components)
-              eqv?)))
-        (cond ((not (pair? components))
-               (make-object-union components))
-              ((null? (cdr components))
-               (car components))
-              ((every function? components)
-               (union-function* components))
-              (else
-               (make-object-union components))))))
-
-(define (make-object-union components)
-  (%make-object-union (predicate->tag
-                       (disjoin*
-                        (map get-predicate components)))
-                      components))
-
-(define-record-type (<object-union> %make-object-union object-union?)
-  (fields (immutable tag object-union-tag)
-	  (immutable components object-union-components)))
-
-
 (define values-gt2 (begin
 		     (register-predicate! object-union? 'object-union)
 
