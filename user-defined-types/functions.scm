@@ -61,7 +61,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 (define (make-signature-selector arity domain-index
                                  codomain-index)
-  (guarantee gp-exact-nonnegative-integer? arity)
+  (guarantee nonnegative? arity)
   (guarantee (index-predicate arity) domain-index)
   (guarantee (index-predicate 1) codomain-index)
   (lambda (operator)
@@ -212,4 +212,4 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 		      (and (pair? components)
 			   (lambda () (union-function* components)))))))
 
-;;; functions
+

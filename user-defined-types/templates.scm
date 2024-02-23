@@ -23,22 +23,3 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 ;;;; Templates for parametric predicates
 
-
-(define (predicate-template-instantiator template)
-  (let ((tag-instantiator
-         (predicate-template-tag-instantiator template))
-        (pattern (predicate-template-pattern template)))
-    (lambda patterned-predicates
-      (tag->predicate
-       (apply tag-instantiator
-              (map-template-pattern pattern
-                                    patterned-predicates
-                                    predicate->tag))))))
-
-(define (predicate-template-parameter-names template)
-  (template-pattern->names
-   (predicate-template-pattern template)))
-
-
-
-

@@ -21,15 +21,10 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 |#
 
-;;; functions
-(define (simple-function-name function)
-  (simple-function-metadata-name
-   (applicable-object->object function)))
-
 ;;;; Restriction of values
 
 (define (restriction-error value predicate)
-  (error "Value doesn't fit predicate:" value predicate))
+  (error 'restriction-error "Value doesn't fit predicate:" value predicate))
 
 (define (make-object-applicable predicate object applicator)
   (guarantee procedure? applicator)

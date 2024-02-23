@@ -55,16 +55,16 @@ substrate set-up! error-generic-procedure-handler: Inapplicable generic procedur
 
 ;; (gp-pred-md-init)        ;这个同tags.scm 注册谓词的方式矛盾,不能同时用 2024年1月21日10:52:21
 
-(include "generics.scm")
-(include "tagging.scm")
-(include "predicates.scm")
-(include "templates.scm")
-(include "values.scm")
-(include "functions.scm")
+(include "user-defined-types\\generics.scm")
+(include "user-defined-types\\tagging.scm")
+(include "user-defined-types\\predicates.scm")
+;; (include "user-defined-types\\templates.scm")
+(include "user-defined-types\\values.scm")
+(include "user-defined-types\\functions.scm")
 ;; (include "tags.scm")
 
-(include "adventure-substrate.scm")   	;其中的define-record-printer在utlis给出实现,这个过程的实现调用了standard-print-method,是mit的过程
-(include "adventure-objects.scm")
+(include "user-defined-types\\adventure-substrate.scm")   	;其中的define-record-printer在utlis给出实现,这个过程的实现调用了standard-print-method,是mit的过程
+(include "user-defined-types\\adventure-objects.scm")
 
 (define the-clock)
 (define all-places)
@@ -92,6 +92,9 @@ substrate set-up! error-generic-procedure-handler: Inapplicable generic procedur
   the-clock)
 
 ;;; User interface
+(define (done)
+  (printf "~%done~%"))
+
 (define (go direction)
   (let ((exit
          (find-exit-in-direction direction
@@ -100,19 +103,19 @@ substrate set-up! error-generic-procedure-handler: Inapplicable generic procedur
         (take-exit! exit my-avatar)
         (narrate! (list "No exit in" direction "direction")
                   my-avatar)))
-  'done)
+  (done))
 
 (define (take-thing name)
   (let ((thing (find-thing name (here))))
     (if thing
         (take-thing! thing my-avatar)))
-  'done)
+  (done))
 
 (define (drop-thing name)
   (let ((thing (find-thing name my-avatar)))
     (if thing
         (drop-thing! thing my-avatar)))
-  'done)
+  (done))
 
 (define (look-in-bag #:optional person-name)
   (let ((person
@@ -126,25 +129,25 @@ substrate set-up! error-generic-procedure-handler: Inapplicable generic procedur
                      (cons* referent "bag contains" things)
                      (list referent "bag is empty")))
                my-avatar)))
-  'done)
+  (done))
 
 (define (whats-here)
   (look-around my-avatar)
-  'done)
+  (done))
 
 (define (say . message)
   (say! my-avatar message)
-  'done)
+  (done))
 
 (define (tell person-name . message)
   (tell! message (find-person person-name))
-  'done)
+  (done))
 
 (define (hang-out ticks)
   (do ((i 0 (+ i 1)))
       ((not (< i ticks)))
     (tick! (get-clock)))
-  'done)
+  (done))
 
 ;;; Support for UI
 
@@ -370,4 +373,5 @@ substrate set-up! error-generic-procedure-handler: Inapplicable generic procedur
 
 ;; (create-students places-mit)
 
-(start-adventure '爱宠莎莎)
+;; (start-adventure '爱宠莎莎)
+

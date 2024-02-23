@@ -42,7 +42,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 (define (simple-abstract-predicate name data-test)
   (make-simple-predicate name data-test tagging-strategy:always))
 
-(define udp-predicates-store (make-alist-store eq?))
+(define udp-predicates-store (make-alist-store eq?)) ;这个应该可以换成hash  2024年2月22日17:58:32
 
 (define have-compound-operator-registrar? (udp-predicates-store 'has?))
 (define get-compound-operator-registrar (udp-predicates-store 'get))
@@ -68,21 +68,21 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
     (lambda (data-test operator tags)
       ;; (declare (ignore data-test operator))
       tags)
-    (lambda (data-test operator tags)parametric-tag?
+    (lambda (data-test operator tags)
 	    (standard-compound-tag data-test operator tags))))
 
 (define pred-llpc (begin
-		  (define-compound-operator-registrar 'is-list-of
-		    (make-listish-memoizer))
+		    (define-compound-operator-registrar 'is-list-of
+		      (make-listish-memoizer))
 
-		  (define-compound-operator-registrar 'is-non-empty-list-of
-		    (make-listish-memoizer))
+		    (define-compound-operator-registrar 'is-non-empty-list-of
+		      (make-listish-memoizer))
 
-		  (define-compound-operator-registrar 'is-pair-of
-		    (make-listish-memoizer))
+		    (define-compound-operator-registrar 'is-pair-of
+		      (make-listish-memoizer))
 
-		  (define-compound-operator-registrar 'complement
-		    (make-listish-memoizer))))
+		    (define-compound-operator-registrar 'complement
+		      (make-listish-memoizer))))
 
 (define (joinish wrap-constructor)
   (let ((memoizer

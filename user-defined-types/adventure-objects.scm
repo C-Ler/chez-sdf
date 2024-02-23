@@ -132,6 +132,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 (define place?
   (make-type 'place (list place:vistas place:exits)))
+
 (set-predicate<=! place? container?)
 
 (define make-place
@@ -305,6 +306,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 (define bag?
   (make-type 'bag (list bag:holder)))
+
 (set-predicate<=! bag? container?)
 
 (define make-bag
@@ -315,7 +317,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 (define set-holder!
   (property-setter bag:holder bag? person?))
-
+
 ;;; Autonomous people (non-player characters)
 
 (define autonomous-agent:restlessness
@@ -533,7 +535,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 ;; coderef: generic-move:default
 (define-generic-procedure-handler generic-move!
-  (match-args thing? container? container? person?)
+  (match-args thing? container? container? person?) ;将移动用于不可移动物体时  2024年2月19日21:39:24
   (lambda (thing from to actor)
     (tell! (list thing "is not movable")
            actor)))
@@ -571,9 +573,12 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
       (if (not (eqv? from to))
           (move-internal! mobile-thing from to)))))
 
-;; coderef: generic-move:take
+(define non-person-mobile-thing?
+  (conjoin mobile-thing? (complement person?)))
+
+;; coderef: generic-move:take  有问题,导致person也可以被take....
 (define-generic-procedure-handler generic-move!
-  (match-args mobile-thing? place? bag? person?)
+  (match-args non-person-mobile-thing? place? bag? person?)
   (lambda (mobile-thing from to actor)
     (let ((new-holder (get-holder to)))
       (cond ((eqv? actor new-holder)

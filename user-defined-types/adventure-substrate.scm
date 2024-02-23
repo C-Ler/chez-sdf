@@ -22,6 +22,9 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 |#
 
 ;;;; Properties
+(define-record-type (<property> %make-property property?)
+    (fields (immutable name property-name) (immutable predicate property-predicate) (immutable default-supplier property-default-supplier))
+  )
 
 (define (make-property name . plist)	;构造属性的方法,对record做了封装,plist可以换成hashtable  2023年12月31日16:26:26
   (guarantee symbol? name)		;相较于书中的示例代码,少了提示的文本 2023年12月31日16:14:51
@@ -61,13 +64,6 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 (define property-keywords
   `(predicate ,@property-default-keywords))
-
-(define-record-type (<property> %make-property property?)
-    (fields (immutable name property-name) (immutable predicate property-predicate) (immutable default-supplier property-default-supplier))
-    
-  
-  
-  )
 
 (define (property-optional? property)
   (if (property-default-supplier property) #t #f))
@@ -251,6 +247,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 ;;; 冒险游戏需要用到的其它东西
 (define (direction? object)
   (if (memv object known-directions) #t #f))
+
 (register-predicate! direction? 'direction)
 
 (define known-directions
@@ -303,7 +300,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
           (eqv? name (get-name object)))
         objects))
 
-(define-generic-procedure-handler tagged-data-representation
+(define-generic-procedure-handler tagged-data-representation ;这两个可能起到某种作用,比如pp 示例中的各种obj  2024年2月19日20:56:38
   (match-args object?)
   (lambda (super object)
     (append (super object)
@@ -362,7 +359,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 (define (disable-debugging)
   (if debug-output
       (set! debug-output #f)))
-
+
 (define (display-message message port)
   (guarantee message? message 'display-message)
   (if (pair? message)

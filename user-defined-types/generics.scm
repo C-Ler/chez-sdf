@@ -20,24 +20,177 @@ You should have received a copy of the GNU General Public License
 along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 
-本文件仅被 tagging 引用 2024年1月30日22:13:47
 |#
+;;; 原generic 的部分
+(define (make-subsetting-dispatch-store-maker choose-handler) ;应该是定义了另一种ds的maker,对simple-dispatch-store扩展了一下,只能取出,不能放入  2024年1月17日21:54:12
+  ;; ;; P190
+  (lambda ()
+    (let ((delegate (make-simple-dispatch-store)))
+
+      (define (get-handler args)
+        (let ((matching
+               (filter (lambda (rule)
+                         (is-generic-handler-applicable?
+                          rule args))
+                       ((delegate 'get-rules)))))
+          (and (pair? matching)
+               (choose-handler
+                (map cdr (sort rule< matching))	;mit的sort 接受参数的顺序和R6RS相反...  2024年1月9日22:25:43
+                ((delegate 'get-default-handler))))))
+
+      (lambda (message)
+        (case message
+          ((get-handler) get-handler)
+          (else (delegate message)))))))
+
+(define (is-generic-handler-applicable? rule args)
+  (if (simple-function? (cdr rule))
+      (simple-function-apply-fit (cdr rule) args) ;functions中定义... 2024年1月30日22:12:49
+      (predicates-match? (car rule) args)))
+
+(define (rule< r1 r2)
+  (let loop ((ps1 (car r1)) (ps2 (car r2)))
+    (if (pair? ps1)
+        (cond ((eqv? (car ps1) (car ps2))
+               (loop (cdr ps1) (cdr ps2)))
+              ((predicate<= (car ps1) (car ps2))
+               #t)
+              ((predicate<= (car ps2) (car ps1))
+               #f)
+              (else
+               (loop (cdr ps1) (cdr ps2))))
+        #f)))
+
+(define make-most-specific-dispatch-store
+  ;; P190的第一种方法,选择已经排序的handler的第一个,仅在本文件中被引用 2024年1月30日21:58:06
+  (make-subsetting-dispatch-store-maker
+   (lambda (handlers default-handler)	;作为一个接受两个参数的choose-handler,这个λ相当于只传入了一个参数....((delegate 'get-default-handler))根本没用,所以是最符合条件的ds 2024年1月17日22:01:01
+     ;; (declare (ignore default-handler))  ;看了下http://computer-programming-forum.com/40-scheme/804b827200ac5c30.htm 这个mit-s的保留syntax是防止内建过程被重定义的  2024年1月2日17:14:04
+     (car handlers))))
+
+(define make-chaining-dispatch-store
+  ;; P190的第二种方法,另一种存储方式,子集的handler可以替代超集的部分而不用修改,冒险游戏的clock handler就使用了这个,tagging中用于实现tagged-data-description  2024年1月30日21:56:49
+  (make-subsetting-dispatch-store-maker
+   (lambda (handlers default-handler)
+     (let loop ((handlers handlers))
+       (if (pair? handlers)
+           (let ((handler (car handlers))
+                 (next-handler (loop (cdr handlers))))
+             (lambda args
+               (apply handler (cons next-handler args)))) ;这个看起来是(handler1 (handler2 (handler3 ...这样  2024年1月17日22:03:35
+           default-handler)))))
+
+(define (make-cached-most-specific-dispatch-store) ;仅在本文件中被引用  2024年1月30日21:51:04
+  (cache-wrapped-dispatch-store
+   (make-most-specific-dispatch-store)
+   get-tag))
+
+(define (make-cached-chaining-dispatch-store) ;;仅在本文件中被引用  2024年1月30日21:51:04
+  (cache-wrapped-dispatch-store
+   (make-chaining-dispatch-store)
+   get-tag))
+
+(define most-specific-generic-procedure	;tagging用于实现tagged-data-description 冒险游戏中频繁引用  2024年1月30日21:51:59
+  (generic-procedure-constructor
+   make-cached-most-specific-dispatch-store))
+
+(define chaining-generic-procedure	;冒险游戏中有所引用,实现了某些gp,比如set-up! tear-down! enter-place!  2024年1月30日21:53:02
+  (generic-procedure-constructor
+   make-cached-chaining-dispatch-store))
+
+;; (set! make-default-dispatch-store	;替换了原本common中的该过程,但是没被引用,注释掉好了 2024年1月30日21:54:20
+;;   make-cached-most-specific-dispatch-store)
+
 
 ;;; tagging 的部分  2024年2月1日20:07:31
+(define-record-type (<tagged-data> %make-tagged-data tagged-data?)
+  (fields (immutable tag tagged-data-tag) (immutable data tagged-data-data))
+  )
 
+;;;; Tagged data
+
+(define tagged-data-representation
+  ((generic-procedure-constructor make-chaining-dispatch-store)
+   'tagged-data-representation 1
+   (lambda (tagged-data)
+     (list (tagged-data-data tagged-data)))))
+
+(define tagged-data-description
+  (most-specific-generic-procedure 'tagged-data-description 1
+				   (constant-generic-procedure-handler #f)))
+
+;;; 可以定义一个print的gp,然后对不同的类型进行扩展 2024年1月20日13:38:04
+;;; MIT/GNU Scheme: integrate with printer
+;; (define-print-method tagged-data?
+;;   (standard-print-method
+;;       (lambda (tagged-data)
+;;         (tag-name (tagged-data-tag tagged-data)))
+;;     tagged-data-representation))
+
+;;; MIT/GNU Scheme: integrate with pretty-printer
+;; (define-pp-describer tagged-data?
+;;   tagged-data-description)
+
+(define (tagging-strategy:always name data-test make-tag) ;任意对象都加tag 2024年1月20日17:42:55
+
+  (define (constructor data)
+    (if (not (data-test data))
+        (error 'tagging-strategy:always (string-append "Ill-formed data for " (symbol->string name) ":")
+               data))
+    (%make-tagged-data tag data))
+
+  (define (predicate object)
+    (and (tagged-data? object)
+         (tag<= (tagged-data-tag object) tag)
+         (data-test (tagged-data-data object))))
+
+  (define tag
+    (make-tag predicate constructor tagged-data-data))
+
+  tag)
+
+(define (tagging-strategy:optional name data-test make-tag) ;data的tag和给定tag eq?时才加tag  2024年1月20日17:45:26
+
+  (define (constructor data)
+    (if (not (data-test data))
+        (error 'tagging-strategy:optional (string-append "Ill-formed data for " (symbol->string name) ":")
+               data))
+    (if (eq? tag (get-tag data))	;这个tag哪来的? 2024年1月20日17:45:16
+        data
+        (%make-tagged-data tag data)))
+
+  (define (predicate object)
+    (or (and (tagged-data? object)
+             (tag<= (tagged-data-tag object) tag)
+             (data-test (tagged-data-data object)))
+        (data-test object)))
+
+  (define (accessor object)
+    (if (tagged-data? object)
+        (tagged-data-data object)
+        object))
+
+  (define tag
+    (make-tag predicate constructor accessor))
+
+  tag)
 
 (define (tagging-strategy:never name data-test make-tag) ;不加tag  2024年1月20日17:42:47
 
   (define (constructor data)		
     (if (not (data-test data))		;加了一个重复出现的结构,判断data是否满足data-test的,这种东西到处出现 2024年1月20日13:40:15
-        (error 'agging-strategy:never (string-append "Ill-formed data for " (symbol->string name) ":")
+        (error 'tagging-strategy:never (string-append "Ill-formed data for " (symbol->string name) ":")
                data))
     data)
 
   (define tag
     (make-tag data-test constructor (lambda (object) object)))
-
+  
   tag)
+
+(define get-data
+  (simple-generic-procedure 'get-data 1
+			    (lambda (object) object)))
 
 ;;; predicates的部分 2024年1月30日22:35:04
 ;;;; Basic tag structure
@@ -99,7 +252,6 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 (define (%invoke-tagging-strategy tagging-strategy name data-test
                                   maker)
-  ;; Exception: invalid context for definition (define rtd ($make-record-type-descriptor #!base-rtd (quote simple-tag) #f 2024年2月8日20:25:47
   (tagging-strategy			;比如tagging-strategy:never,传入构造器和参数,返回构造的结果,即tag
    name
    data-test
@@ -114,28 +266,32 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 (define-record-type (simple-tag %make-simple-tag simple-tag?)
   (fields (immutable shared simple-tag-shared)))
 
-(define pred=st (define-tag-type simple-tag? simple-tag-shared))
 ;; (define-tag-record-printer <simple-tag>)  ;为了避免出现lib化报语法错误的权宜之计.... 2024年2月3日17:48:18
+
+(define-record-type (<parametric-tag> %make-parametric-tag parametric-tag?)
+  (fields (immutable shared parametric-tag-shared)
+	  (immutable template parametric-tag-template)
+	  (immutable bindings parametric-tag-bindings))
+  )
+
+;; (define-tag-record-printer <parametric-tag>)
+
+(define-record-type (<compound-tag> %make-compound-tag compound-tag?)
+  (fields (immutable shared compound-tag-shared)
+	  (immutable operator compound-tag-operator)
+	  (immutable components compound-tag-components))
+    )
+
+(define ct    
+  (begin
+    (define-tag-type simple-tag? simple-tag-shared)
+    (define-tag-type parametric-tag? parametric-tag-shared)
+    (define-tag-type compound-tag? compound-tag-shared)))
+;; (define-tag-record-printer <compound-tag>)
 
 (define (make-simple-tag name data-test tagging-strategy)
   (%invoke-tagging-strategy tagging-strategy name data-test
                             %make-simple-tag))
-
-(define-record-type (<parametric-tag> %make-parametric-tag parametric-tag?)
-  (fields (immutable shared parametric-tag-shared) (immutable template parametric-tag-template) (immutable bindings parametric-tag-bindings))
-  )
-
-(define pt
-  (define-tag-type parametric-tag? parametric-tag-shared))
-;; (define-tag-record-printer <parametric-tag>)
-
-(define-record-type (<compound-tag> %make-compound-tag compound-tag?)
-    (fields (immutable shared compound-tag-shared) (immutable operator compound-tag-operator) (immutable components compound-tag-components))
-    )
-
-(define ct
-  (define-tag-type compound-tag? compound-tag-shared))
-;; (define-tag-record-printer <compound-tag>)
 
 (define (make-parametric-tag name data-test tagging-strategy
                              template bindings)
@@ -145,7 +301,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
                                                     template
                                                     bindings))))
 
-(define (make-simple-predicate name data-test tagging-strategy)
+(define (make-simple-predicate name data-test tagging-strategy)	;从tag-rtd中获取pred
   (tag->predicate
    (make-simple-tag name data-test tagging-strategy)))
 
@@ -153,15 +309,12 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
   (guarantee procedure? predicate)
   (make-simple-predicate name predicate tagging-strategy:never))
 
-(define (predicate-name predicate)
+(define (predicate-name predicate)	;这里的pred是md  2024年2月16日21:21:21
   (tag-name (predicate->tag predicate)))
 
 (define (parametric-predicate? object)
   (and (predicate? object)
        (parametric-tag? (predicate->tag object))))
-
-(define pred-pp (begin
-		  (register-predicate! parametric-predicate? 'parametric-predicate)))
 
 (define (predicate-constructor predicate)
   (tag-constructor (predicate->tag predicate)))
@@ -176,15 +329,16 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 (define (parametric-predicate-template predicate)
   (parametric-tag-template (predicate->tag predicate)))
 
-;;; 用来存储标签顺序关系的
-(define (false-tag<= tag1 tag2) ;; (declare (ignore tag1 tag2)) 
+(define pred-pp (begin
+		  (register-predicate! parametric-predicate? 'parametric-predicate)))
+
+;;; 用来判断标签1是否是标签2的子集
+(define (false-tag<= tag1 tag2) ;; (declare (ignore tag1 tag2)),values的部分 使用了下面的过程,这个定义应该没必要. 2024年2月18日20:42:26
+  ;; predicates文件引用了这个过程,用来扩展多个gp 2024年2月19日19:03:27
   #f)
  
 (define generic-tag<=
   (simple-generic-procedure 'generic-tag<= 2 false-tag<=))
-
-(define tag<=-cache
-  (make-equal-hash-table))
 
 (define (uncached-tag<= tag1 tag2)
   (or (eqv? tag1 tag2)
@@ -192,6 +346,9 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
       (any (lambda (tag)
              (cached-tag<= tag tag2))
            (get-tag-supersets tag1))))
+
+(define tag<=-cache
+  (make-equal-hash-table))
 
 (define (cached-tag<= tag1 tag2)
   (hash-table-intern! tag<=-cache
@@ -206,6 +363,10 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 (define (tag>= tag1 tag2)
   (tag<= tag2 tag1))
 
+(define (tag= tag1 tag2)
+  (guarantee tag? tag1)
+  (guarantee tag? tag2)
+  (eqv? tag1 tag2))
 
 (define (set-tag<=! tag superset)
   (if (tag>= tag superset)
@@ -222,11 +383,6 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 (define (predicate>= predicate1 predicate2)
   (predicate<= predicate2 predicate1))
 
-(define (tag= tag1 tag2)
-  (guarantee tag? tag1)
-  (guarantee tag? tag2)
-  (eqv? tag1 tag2))
-
 (define (predicate= predicate1 predicate2)
   (tag= (predicate->tag predicate1)
         (predicate->tag predicate2)))
@@ -234,8 +390,6 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 (define (set-predicate<=! predicate superset)
   (set-tag<=! (predicate->tag predicate)
               (predicate->tag superset)))
-
-
 
 ;;; values的部分  2024年1月30日22:06:05
 (define udp-values-association (make-metadata-association))
@@ -273,6 +427,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
   (if (predicate value)
       (lambda () value)
       (value-restriction value predicate)))
+
 ;;; templates的部分  2024年1月30日22:39:23
 (define-record-type (<predicate-template> %make-predicate-template predicate-template?)
   (fields (immutable name predicate-template-name)
@@ -305,6 +460,9 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
   (template-pattern-element-name
    (parameter-binding-element binding)))
 
+(define (template-pattern->names pattern)
+  (map template-pattern-element-name pattern))
+
 (define (parameter-binding-polarity binding)
   (template-pattern-element-polarity
    (parameter-binding-element binding)))
@@ -317,12 +475,12 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 (define (predicate-template-accessor name template)
   (let ((elt
-         (find (lambda (elt)
+         (find (lambda (elt)5
                  (eq? (template-pattern-element-name elt)
                       name))
                (predicate-template-pattern template))))
     (if (not elt)
-        (error "Unknown parameter name:" name template))
+        (error 'predicate-template-accessor "Unknown parameter name:" name template))
     (let ((valid? (predicate-template-predicate template))
           (convert
            (if (template-pattern-element-single-valued? elt)
@@ -358,8 +516,11 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
                 (polarity? (caddr object))
                 (null? (cdddr object))))))
 
-(define (template-pattern->names pattern)
-  (map template-pattern-element-name pattern))
+
+
+(define (predicate-template-parameter-names template)
+  (template-pattern->names
+   (predicate-template-pattern template)))
 
 (define (template-pattern? object)
   (and (non-empty-list? object)
@@ -406,6 +567,17 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
            (else (error:not-a template-pattern? pattern))))
        pattern
        object))
+
+(define (predicate-template-instantiator template)
+  (let ((tag-instantiator
+         (predicate-template-tag-instantiator template))
+        (pattern (predicate-template-pattern template)))
+    (lambda patterned-predicates
+      (tag->predicate
+       (apply tag-instantiator
+              (map-template-pattern pattern
+                                    patterned-predicates
+                                    predicate->tag))))))
 
 (define (make-predicate-template-tag-instantiator
            name pattern make-data-test tagging-strategy
@@ -455,8 +627,13 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 ;;; functions的部分  2024年1月30日22:08:29
 (define-record-type (<simple-function-metadata> make-simple-function-metadata simple-function-metadata?)
-  (fields (immutable name simple-function-metadata-name) (immutable  procedure simple-function-metadata-procedure))
+  (fields (immutable name simple-function-metadata-name)
+	  (immutable procedure simple-function-metadata-procedure))
   )
+
+(define (simple-function-name function)
+  (simple-function-metadata-name
+   (applicable-object->object function)))
 
 (define (simple-function? object)
   (and (applicable-object? object)	;定义于values  2024年1月30日22:00:36
@@ -519,37 +696,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 ;;; taggs
 ;;; taggs 的部分,得插在tagging的中间... 2024年2月1日21:22:07
 ;;; lib化之后得放在这里 2024年2月15日11:13:12
-(define-record-type (<tagged-data> %make-tagged-data tagged-data?)
-  (fields (immutable tag tagged-data-tag) (immutable data tagged-data-data))
-  )
-
-(define (tagging-strategy:optional name data-test make-tag) ;data的tag和给定tag eq?时才加tag  2024年1月20日17:45:26
-
-  (define (constructor data)
-    (if (not (data-test data))
-        (error 'tagging-strategy:optional (string-append "Ill-formed data for " (symbol->string name) ":")
-               data))
-    (if (eq? tag (get-tag data))	;这个tag哪来的? 2024年1月20日17:45:16
-        data
-        (%make-tagged-data tag data)))
-
-  (define (predicate object)
-    (or (and (tagged-data? object)
-             (tag<= (tagged-data-tag object) tag)
-             (data-test (tagged-data-data object)))
-        (data-test object)))
-
-  (define (accessor object)
-    (if (tagged-data? object)
-        (tagged-data-data object)
-        object))
-
-  (define tag
-    (make-tag predicate constructor accessor))
-
-  tag)
-
-(define (primitive-predicate name data-test)
+(define (primitive-predicate name data-test) ;用来将不是原生谓词转化为gp-udp的谓词的  2024年2月22日17:07:54
   (if (not (predicate? data-test))
       (register-predicate! data-test name ;; (symbol 'n: name) 感觉没必要加n: 2024年1月19日21:00:00
 			   ))
@@ -565,82 +712,62 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 ;;; constructor only wraps the data when the implementation tag
 ;;; is different.
 
-
-
 ;;; 下面的谓词前面全部都去掉了 n: 2024年1月19日21:00:45
 ;;; 然后因为define complex? 这种操作会导致complex?没有bound 前面全部加了gp- 2024年1月19日21:17:15
 ;; (define (boolean? b)
 ;;   (or (eq? #t b) (eq? #f b)))
 
-(define gp-boolean?
-  (primitive-predicate 'boolean boolean?))
+(define primitive-predicate-convert
+  (begin
+    (primitive-predicate 'boolean boolean?)
+    (primitive-predicate 'complex complex?)
+    (primitive-predicate 'exact-integer exact-integer?)
+    ;; (define gp-exact-rational?
+    ;;   (primitive-predicate 'exact-rational rational?))   mit才有的定义 2024年1月19日21:21:15
 
-(define gp-complex?
-  (primitive-predicate 'complex complex?))
+    (primitive-predicate 'inexact-real flonum?)
+    
+    (primitive-predicate 'integer integer?)
 
-(define gp-exact-integer?
-  (primitive-predicate 'exact-integer exact-integer?))
+    (primitive-predicate 'null null?)
+    
+    (primitive-predicate 'pair pair?)
+    
 
-;; (define gp-exact-rational?
-;;   (primitive-predicate 'exact-rational rational?))   mit才有的定义 2024年1月19日21:21:15
+    (primitive-predicate 'rational rational?)
 
-(define gp-inexact-real?
-  (primitive-predicate 'inexact-real flonum?))
+    (primitive-predicate 'real real?)
 
-(define gp-integer?
-  (primitive-predicate 'integer integer?))
+    (primitive-predicate 'string string?)
 
-(define gp-null?
-  (primitive-predicate 'null null?))
-
-(define gp-pair?
-  (primitive-predicate 'pair pair?))
-
-(define gp-rational?
-  (primitive-predicate 'rational rational?))
-
-(define gp-real?
-  (primitive-predicate 'real real?))
-
-(define gp-string?
-  (primitive-predicate 'string string?))
-
-(define gp-vector?
-  (primitive-predicate 'vector vector?))
+    (primitive-predicate 'vector vector?)
 
 ;;; 下面两个去掉了exact的部分  2024年1月19日21:24:47
-(define gp-exact-nonnegative-integer?
-  (primitive-predicate 'exact-nonnegative-integer
-                       nonnegative?))
+    (primitive-predicate 'exact-nonnegative-integer
+			 nonnegative?)
 
-(define gp-exact-positive-integer?
-  (primitive-predicate 'exact-positive-integer
-                       positive?))
+    (primitive-predicate 'exact-positive-integer
+			 positive?)
 
-(define gp-list?
-  (primitive-predicate 'list list?))
+    (primitive-predicate 'list list?)
 
-(define gp-non-empty-list?
-  (primitive-predicate 'non-empty-list non-empty-list?))
+    (primitive-predicate 'non-empty-list non-empty-list?)
 
-(define gp-number?
-  (primitive-predicate 'number number?)) ;number symbol? boolean? 这几个在predicate-metadata.scm 已经注册过了,由于predicates文件中的tag<= 报错 2024年1月19日21:43:45
-
-(define gp-symbol?
-  (primitive-predicate 'symbol symbol?))
+    (primitive-predicate 'number number?) ;number symbol? boolean? 这几个在predicate-metadata.scm 已经注册过了,由于predicates文件中的tag<= 报错 2024年1月19日21:43:45
+    (primitive-predicate 'symbol symbol?)))
 
 (define taggs-relation (begin
-			 (set-predicate<=! gp-complex? gp-number?)
-			 ;; (set-predicate<=! gp-exact-integer? gp-integer?)
-			 (set-predicate<=! gp-exact-nonnegative-integer? gp-integer?)
-			 (set-predicate<=! gp-exact-positive-integer? gp-integer?)
-			 ;; (set-predicate<=! gp-exact-rational? gp-rational?)
-			 (set-predicate<=! gp-inexact-real? gp-real?)
-			 (set-predicate<=! gp-integer? gp-rational?)
-			 (set-predicate<=! gp-non-empty-list? gp-list?)
-			 (set-predicate<=! gp-null? gp-list?)
-			 (set-predicate<=! gp-rational? gp-real?)
-			 (set-predicate<=! gp-real? gp-complex?)
+			 (set-predicate<=! complex? number?)
+			 ;; (set-predicate<=! exact-integer? integer?)
+			 (set-predicate<=! nonnegative? integer?)
+			 (set-predicate<=! positive? integer?)
+			 ;; (set-predicate<=! exact-rational? rational?)
+			 ;; (set-predicate<=! real? real?)
+			 (set-predicate<=! integer? rational?)
+			 (set-predicate<=! non-empty-list? list?)
+			 (set-predicate<=! null? list?)
+			 (set-predicate<=! rational? real?)
+			 (set-predicate<=! real? complex?)
 
 			 (register-predicate! procedure? 'procedure)))
 
@@ -653,8 +780,8 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
   (hash-table-intern! %object-tag-map name (lambda () (predicate->tag (register-predicate!  pred name)))))
 
 (define implementation-tag		 ;由于没找到chez及R6RS获取obj type的方法,只能手撸一个 2024年1月21日17:33:25
-  (let ((boolean-tag (predicate->tag gp-boolean?))
-        (null-tag (predicate->tag gp-null?)))
+  (let ((boolean-tag (predicate->tag boolean?))
+        (null-tag (predicate->tag null?)))
     (lambda (object)
       (cond ((eq? object #t) boolean-tag)
             ((eq? object '()) null-tag)
@@ -684,19 +811,19 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
             type-names))
 
 (define taggs-pre (begin
-		     (%predefine-tags gp-boolean? 'boolean 'false)
-		     (%predefine-tags gp-complex? 'complex 'recnum)
-		     (%predefine-tags gp-exact-integer? 'exact-integer 'bignum 'fixnum)
-		     ;; (%predefine-tags gp-exact-rational? 'exact-rational 'ratnum)
-		     (%predefine-tags gp-inexact-real? 'real 'flonum)
-		     (%predefine-tags gp-pair? 'pair 'pair)
+		     (%predefine-tags boolean? 'boolean 'false)
+		     (%predefine-tags complex? 'complex 'recnum)
+		     (%predefine-tags exact-integer? 'exact-integer 'bignum 'fixnum)
+		     ;; (%predefine-tags exact-rational? 'exact-rational 'ratnum)
+		     ;; (%predefine-tags inexact-real? 'real 'flonum)
+		     (%predefine-tags pair? 'pair 'pair)
 		     (%predefine-tags procedure? 'procedure
 				      'extended-procedure 'procedure 'entity
 				      'primitive 'compiled-entry)
-		     (%predefine-tags gp-string? 'string 'string)
-		     (%predefine-tags gp-symbol? 'symbol
+		     (%predefine-tags string? 'string 'string)
+		     (%predefine-tags symbol? 'symbol
 				      'interned-symbol 'uninterned-symbol)
-		     (%predefine-tags gp-vector? 'vector 'vector)
+		     (%predefine-tags vector? 'vector 'vector)
 ))
 
 
@@ -705,6 +832,10 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
   (simple-generic-procedure 'get-tag 1
     (lambda (object)
       (implementation-tag object))))
+
+(define tagging-gt (define-generic-procedure-handler get-tag ;扩展tag的gp,基于上面的rtd  2024年1月20日13:33:32
+		     (match-args tagged-data?)
+		     tagged-data-tag))
 
 (define (get-predicate object)
   (tag->predicate (get-tag object)))
@@ -843,84 +974,6 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 			  ))
 
 
-;;; 原generic 的部分
-(define (make-subsetting-dispatch-store-maker choose-handler) ;应该是定义了另一种ds的maker,对simple-dispatch-store扩展了一下,只能取出,不能放入  2024年1月17日21:54:12
-  ;; ;; P190
-  (lambda ()
-    (let ((delegate (make-simple-dispatch-store)))
 
-      (define (get-handler args)
-        (let ((matching
-               (filter (lambda (rule)
-                         (is-generic-handler-applicable?
-                          rule args))
-                       ((delegate 'get-rules)))))
-          (and (pair? matching)
-               (choose-handler
-                (map cdr (sort rule< matching))	;mit的sort 接受参数的顺序和R6RS相反...  2024年1月9日22:25:43
-                ((delegate 'get-default-handler))))))
-
-      (lambda (message)
-        (case message
-          ((get-handler) get-handler)
-          (else (delegate message)))))))
-
-(define (is-generic-handler-applicable? rule args)
-  (if (simple-function? (cdr rule))
-      (simple-function-apply-fit (cdr rule) args) ;functions中定义... 2024年1月30日22:12:49
-      (predicates-match? (car rule) args)))
-
-(define (rule< r1 r2)
-  (let loop ((ps1 (car r1)) (ps2 (car r2)))
-    (if (pair? ps1)
-        (cond ((eqv? (car ps1) (car ps2))
-               (loop (cdr ps1) (cdr ps2)))
-              ((predicate<= (car ps1) (car ps2))
-               #t)
-              ((predicate<= (car ps2) (car ps1))
-               #f)
-              (else
-               (loop (cdr ps1) (cdr ps2))))
-        #f)))
-
-(define make-most-specific-dispatch-store
-  ;; P190的第一种方法,选择已经排序的handler的第一个,仅在本文件中被引用 2024年1月30日21:58:06
-  (make-subsetting-dispatch-store-maker
-   (lambda (handlers default-handler)	;作为一个接受两个参数的choose-handler,这个λ相当于只传入了一个参数....((delegate 'get-default-handler))根本没用,所以是最符合条件的ds 2024年1月17日22:01:01
-     ;; (declare (ignore default-handler))  ;看了下http://computer-programming-forum.com/40-scheme/804b827200ac5c30.htm 这个mit-s的保留syntax是防止内建过程被重定义的  2024年1月2日17:14:04
-     (car handlers))))
-
-(define make-chaining-dispatch-store
-  ;; P190的第二种方法,另一种存储方式,子集的handler可以替代超集的部分而不用修改,冒险游戏的clock handler就使用了这个,tagging中用于实现tagged-data-description  2024年1月30日21:56:49
-  (make-subsetting-dispatch-store-maker
-   (lambda (handlers default-handler)
-     (let loop ((handlers handlers))
-       (if (pair? handlers)
-           (let ((handler (car handlers))
-                 (next-handler (loop (cdr handlers))))
-             (lambda args
-               (apply handler (cons next-handler args)))) ;这个看起来是(handler1 (handler2 (handler3 ...这样  2024年1月17日22:03:35
-           default-handler)))))
-
-(define (make-cached-most-specific-dispatch-store) ;仅在本文件中被引用  2024年1月30日21:51:04
-  (cache-wrapped-dispatch-store
-   (make-most-specific-dispatch-store)
-   get-tag))
-
-(define (make-cached-chaining-dispatch-store) ;;仅在本文件中被引用  2024年1月30日21:51:04
-  (cache-wrapped-dispatch-store
-   (make-chaining-dispatch-store)
-   get-tag))
-
-(define most-specific-generic-procedure	;tagging用于实现tagged-data-description 冒险游戏中频繁引用  2024年1月30日21:51:59
-  (generic-procedure-constructor
-   make-cached-most-specific-dispatch-store))
-
-(define chaining-generic-procedure	;冒险游戏中有所引用,实现了某些gp,比如set-up! tear-down! enter-place!  2024年1月30日21:53:02
-  (generic-procedure-constructor
-   make-cached-chaining-dispatch-store))
-
-;; (set! make-default-dispatch-store	;替换了原本common中的该过程,但是没被引用,注释掉好了 2024年1月30日21:54:20
-;;   make-cached-most-specific-dispatch-store)
 
 ;; (测试输出 "generic-end")
