@@ -21,7 +21,141 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 |#
 
-;;;; Restriction of values
+;;; values
+(define-record-type (<object-union> %make-object-union object-union?)
+  (fields (immutable tag object-union-tag)
+	  (immutable components object-union-components)))
+
+(define (make-object-union components)
+  (%make-object-union (predicate->tag
+                       (disjoin*
+                        (map get-predicate components)))
+                      components))
+
+(define (object-union* components)
+  (guarantee list? components)
+  (if (and (pair? components)
+           (null? (cdr components)))
+      (car components)
+      (let ((components
+             (delete-duplicates
+              (append-map (lambda (object)
+                            (if (object-union? object)
+                                (object-union-components object)
+                                (list object)))
+                          components)
+              eqv?)))
+        (cond ((not (pair? components))
+               (make-object-union components))
+              ((null? (cdr components))
+               (car components))
+              ((every function? components)
+               (union-function* components))
+              (else
+               (make-object-union components))))))
+
+(define (object-union . components)
+  (object-union* components))
+
+(define (union-function-apply-fit function args)
+  (let ((fits (union-function-component-fits function args)))
+    (and (pair? fits)
+         (combine-fits object-union* fits))))
+
+(define (is-function-subsumed? function functions)
+  (let ((predicate (simple-function-predicate function)))
+    (any (lambda (function*)
+           (let ((predicate*
+                  (simple-function-predicate function*)))
+             (and (not (eqv? predicate* predicate))
+                  (every
+                   (lambda (domain* domain)
+                     (predicate<= domain* domain))
+                   (function-predicate-domains predicate*)
+                   (function-predicate-domains predicate)))))
+         functions)))
+
+(define (union-function-components union)
+  (object-union-components (applicable-object->object union)))
+
+(define (function-components function)
+  (cond ((simple-function? function)
+         (list function))
+        ((union-function? function)
+         (union-function-components function))
+        (else
+         (error:not-a function? function))))
+
+(define (union-function-component-fits function args)
+  (let ((fits
+         (map (lambda (function)
+                (simple-function-apply-fit
+                   function args))
+              (union-function-components function))))
+    (let ((functions
+           (filter-map (lambda (function fit)
+                         (and fit function))
+                       (union-function-components function)
+                       fits)))
+      (filter-map (lambda (function fit)
+                    (and fit
+                         (not
+                          (is-function-subsumed? function
+                                                 functions))
+                         fit))
+                  (union-function-components function)
+                  fits))))
+
+(define (union-function* functions)
+  (guarantee-list-of function? functions)
+  (if (null? functions)
+      (error union-function* "Can't make an empty union function."))
+  (let ((simple-functions
+         (append-map function-components functions)))
+    (let ((arity (simple-function-arity (car simple-functions))))
+      (for-each
+       (lambda (simple-function)
+         (if (not (= arity
+                       (simple-function-arity simple-function)))
+             (error 'union-function*-for-each "Inconsistent arity in unio"
+                    arity
+                    (simple-function-arity simple-function))))
+       (cdr simple-functions)))
+    (if (and (pair? simple-functions)
+             (null? (cdr simple-functions)))
+        (car simple-functions)
+        (letrec
+            ((union-function
+              (let ((union (make-object-union simple-functions)))
+                (make-object-applicable
+                 (get-predicate union)
+                 union
+                 (lambda args
+                   (apply-union-function union-function
+                                         args))))))
+          union-function))))
+
+(define (union-function? object)
+  (and (applicable-object? object)
+       (let ((object* (applicable-object->object object)))
+         (and (object-union? object*)
+              (every simple-function?
+                     (object-union-components object*))))))
+
+(define func-uf? (register-predicate! union-function? 'union-function))
+
+(define (function? object)
+  (or (simple-function? object)
+      (union-function? object)))
+
+(define func-func  (begin (register-predicate! function? 'function)
+			  (set-predicate<=! union-function? function?)
+			  (register-predicate! simple-function? 'simple-function)
+			  (set-predicate<=! simple-function? function?)
+			  ))
+
+
+;;;; restriction of values
 
 (define (restriction-error value predicate)
   (error 'restriction-error "Value doesn't fit predicate:" value predicate))

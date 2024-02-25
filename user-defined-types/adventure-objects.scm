@@ -576,6 +576,8 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 (define non-person-mobile-thing?
   (conjoin mobile-thing? (complement person?)))
 
+;; (set-predicate<=! non-person-mobile-thing? mobile-thing?)
+
 ;; coderef: generic-move:take  有问题,导致person也可以被take....
 (define-generic-procedure-handler generic-move!
   (match-args non-person-mobile-thing? place? bag? person?)
@@ -593,7 +595,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
       (if (not (eqv? actor new-holder))
           (say! new-holder (list "Whoa! Thanks, dude!")))
       (move-internal! mobile-thing from to))))
-
+
 ;; coderef: generic-move:drop
 (define-generic-procedure-handler generic-move!
   (match-args mobile-thing? bag? place? person?)

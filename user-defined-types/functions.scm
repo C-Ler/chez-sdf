@@ -23,6 +23,22 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 ;;; The resulting predicate represents a "function space" for the
 ;;; given sets.
+(define function-predicate-codomain
+  (predicate-template-accessor 'codomain function-template))
+
+(define (simple-function-codomain function)
+  (function-predicate-codomain
+   (simple-function-predicate function)))
+
+(define (simple-function-arity function)
+  (length (simple-function-domains function)))
+
+(define (apply-union-function function args)
+  (let ((fit (union-function-apply-fit function args)))
+    (if (not fit)
+        (error 'apply-union-function "Inapplicable functio" function args))
+    (fit)))
+
 (define make-function-predicate
   (predicate-template-instantiator function-template))
 

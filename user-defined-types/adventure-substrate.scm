@@ -23,7 +23,9 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 ;;;; Properties
 (define-record-type (<property> %make-property property?)
-    (fields (immutable name property-name) (immutable predicate property-predicate) (immutable default-supplier property-default-supplier))
+  (fields (immutable name property-name)
+	  (immutable predicate property-predicate)
+	  (immutable default-supplier property-default-supplier))
   )
 
 (define (make-property name . plist)	;构造属性的方法,对record做了封装,plist可以换成hashtable  2023年12月31日16:26:26

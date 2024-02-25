@@ -56,11 +56,13 @@ substrate set-up! error-generic-procedure-handler: Inapplicable generic procedur
 ;; (gp-pred-md-init)        ;这个同tags.scm 注册谓词的方式矛盾,不能同时用 2024年1月21日10:52:21
 
 (include "user-defined-types\\generics.scm")
-(include "user-defined-types\\tagging.scm")
+;; (include "user-defined-types\\tagging.scm")
 (include "user-defined-types\\predicates.scm")
-;; (include "user-defined-types\\templates.scm")
-(include "user-defined-types\\values.scm")
-(include "user-defined-types\\functions.scm")
+
+;;; 下面这三个adventure不需要,arith才需要  2024年2月24日19:54:26
+;; (include "user-defined-types\\templates.scm")   
+;; (include "user-defined-types\\values.scm")
+;; (include "user-defined-types\\functions.scm")
 ;; (include "tags.scm")
 
 (include "user-defined-types\\adventure-substrate.scm")   	;其中的define-record-printer在utlis给出实现,这个过程的实现调用了standard-print-method,是mit的过程

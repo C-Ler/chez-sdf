@@ -24,27 +24,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 ;;; 原tagging的部分  2024年1月30日21:13:00
 ;;;; Generic tag access
 
-(define (tagged-data= t1 t2)
-  (and (eq? (tagged-data-tag t1) (tagged-data-tag t2))
-       (equal*? (tagged-data-data t1) (tagged-data-data t2))))
 
-(define tagging-gd (begin (define-generic-procedure-handler get-data
-			    (match-args tagged-data?)
-			    tagged-data-data)
-			  (define-generic-procedure-handler equal*? ;顺手再扩展equal?的gp 2024年1月20日13:36:41
-			    (match-args tagged-data? tagged-data?)
-			    tagged-data=)))
-
-(define values-gt (begin (define-generic-procedure-handler get-tag
-			   (match-args applicable-object?)
-			   (lambda (object)
-			     (applicable-object-metadata-tag
-			      (applicable-object-metadata object))))
-			 (define-generic-procedure-handler get-data
-			   (match-args applicable-object?)
-			   (lambda (object)
-			     (get-data (applicable-object->object object)))))
-  )
 
 
 

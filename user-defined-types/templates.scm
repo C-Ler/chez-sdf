@@ -22,4 +22,28 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 |#
 
 ;;;; Templates for parametric predicates
+(define (parameter-binding-polarity binding)
+  (template-pattern-element-polarity
+   (parameter-binding-element binding)))
+
+(define (parameter-binding-values binding)
+  (if (template-pattern-element-single-valued?
+       (parameter-binding-element binding))
+      (list (parameter-binding-value binding))
+      (parameter-binding-value binding)))
+
+(define (predicate-template-parameter-names template)
+  (template-pattern->names
+   (predicate-template-pattern template)))
+
+(define (predicate-template-instantiator template)
+  (let ((tag-instantiator
+         (predicate-template-tag-instantiator template))
+        (pattern (predicate-template-pattern template)))
+    (lambda patterned-predicates
+      (tag->predicate
+       (apply tag-instantiator
+              (map-template-pattern pattern
+                                    patterned-predicates
+                                    predicate->tag))))))
 

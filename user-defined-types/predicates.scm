@@ -24,10 +24,58 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 ;;;; Predicate registration
 
 
-;; Needed by code in common
+;;;; Compound predicates
+(define-record-type (<compound-tag> %make-compound-tag compound-tag?)
+  (fields (immutable shared compound-tag-shared)
+	  (immutable operator compound-tag-operator)
+	  (immutable components compound-tag-components))
+    )
+
+(define ct    
+  (begin
+    (define-tag-type compound-tag? compound-tag-shared)))
+
+;; (define-tag-record-printer <compound-tag>)
+(define (compound-predicate? object)
+  (and (predicate? object)
+       (compound-tag? (predicate->tag object))))
+
+(define (compound-predicate-components predicate)
+  (map tag->predicate
+       (compound-tag-components (predicate->tag predicate))))
+
+(define (compound-predicate-predicate operator)
+  (lambda (object)
+    (and (predicate? object)
+         (let ((tag (predicate->tag object)))
+           (and (compound-tag? tag)
+                (eq? operator (compound-tag-operator tag)))))))
+
+(define disjunction? (compound-predicate-predicate 'disjoin))
+(define conjunction? (compound-predicate-predicate 'conjoin))
+
+(define compound-reg
+  (begin
+    (register-predicate! compound-tag? 'compound-tag)
+    (set-predicate<=! compound-tag? tag?)
+    (register-predicate! compound-predicate? 'compound-predicate)
+    (set-predicate<=! compound-predicate? predicate?)
+    (register-predicate! disjunction? 'disjunction)
+    (register-predicate! conjunction? 'conjunction)
+    (set-predicate<=! disjunction? compound-predicate?)
+    (set-predicate<=! conjunction? compound-predicate?)
+    ))
+
 
 
 ;; Needed by code in common.
+;; (define udp-predicates-store (make-alist-store eq?)) ;这个应该可以换成hash  2024年2月22日17:58:32
+(define udp-predicates-store (make-hash-table-store make-key-weak-eq-hash-table)) ;这个应该可以换成hash  2024年2月22日17:58:32
+
+(define have-compound-operator-registrar? (udp-predicates-store 'has?))
+(define get-compound-operator-registrar (udp-predicates-store 'get))
+(define define-compound-operator-registrar (udp-predicates-store 'put!))
+
 (define (register-compound-predicate! joint-predicate operator ;这个也不同于predicate-metadata.scm 2024年1月20日18:30:58
                                       components)
   (guarantee procedure? joint-predicate)
@@ -38,15 +86,6 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
     joint-predicate
     operator
     (map predicate->tag components))))
-
-(define (simple-abstract-predicate name data-test)
-  (make-simple-predicate name data-test tagging-strategy:always))
-
-(define udp-predicates-store (make-alist-store eq?)) ;这个应该可以换成hash  2024年2月22日17:58:32
-
-(define have-compound-operator-registrar? (udp-predicates-store 'has?))
-(define get-compound-operator-registrar (udp-predicates-store 'get))
-(define define-compound-operator-registrar (udp-predicates-store 'put!))
 
 (define (make-compound-tag name data-test tagging-strategy
                            operator components)
@@ -120,9 +159,6 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 (define (true-tag<= tag1 tag2) ;; (declare (ignore tag1 tag2))
   #t)
 
-(define any-object? (conjoin))
-(define no-object? (disjoin))
-
 (define top-tag (predicate->tag any-object?))
 (define bottom-tag (predicate->tag no-object?))
 
@@ -152,34 +188,9 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 			       (for-each (lambda (tag)
 					   (set-tag<=! joint-tag tag))
 					 tags)))))))
+
+		   
 		   ))
-
-;;;; Simple predicates
-
-(define (simple-predicate? object)
-  (and (predicate? object)
-       (simple-tag? (predicate->tag object))))
-
-;;;; Compound predicates
-
-(define (compound-predicate? object)
-  (and (predicate? object)
-       (compound-tag? (predicate->tag object))))
-
-(define (compound-predicate-components predicate)
-  (map tag->predicate
-       (compound-tag-components (predicate->tag predicate))))
-
-(define (compound-predicate-predicate operator)
-  (lambda (object)
-    (and (predicate? object)
-         (let ((tag (predicate->tag object)))
-           (and (compound-tag? tag)
-                (eq? operator (compound-tag-operator tag)))))))
-
-(define disjunction? (compound-predicate-predicate 'disjoin))
-(define conjunction? (compound-predicate-predicate 'conjoin))
-
 ;;;; Parametric predicates
 
 ;; (define (define-tag-record-printer record-type)
@@ -187,31 +198,12 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 ;;     (lambda (tag) (list (tag-name tag)))))
 
 ;;;; Generic tag operations
-(define (get-all-tag-supersets tag)
-  (let loop ((queue (list tag)) (supersets '()))
-    (if (pair? queue)
-        (let ((tag (car queue))
-              (queue (cdr queue)))
-          (let ((new-sets
-                 (lset-difference eqv?
-                                  (get-tag-supersets tag)
-                                  supersets)))
-            (if (pair? new-sets)
-                (loop (append new-sets queue)
-                      (append new-sets supersets))
-                (loop queue supersets))))
-        supersets)))
-
-(define (all-predicate-supersets predicate)
-  (map tag->predicate
-       (get-all-tag-supersets (predicate->tag predicate))))
 
 (define (cached-tag>= tag1 tag2)
   (cached-tag<= tag2 tag1))
 
 ;; These will be modified below.
-
-(define (define-tag<= predicate1 predicate2 handler)
+(define (define-tag<= predicate1 predicate2 handler)  ;扩展了taggin中的generic-tag<=,但是只用于了 parametric-tag? 和 compound-tag?
   (define-generic-procedure-handler generic-tag<=
     (match-args predicate1 predicate2)
     handler))
@@ -234,7 +226,6 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
       datum-test))
 
 (define pred-rp (begin
-
 		  (define-tag<= bottom-tag? tag? true-tag<=)
 		  (define-tag<= tag? top-tag? true-tag<=)
 
@@ -249,7 +240,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 				    (let ((tags1 (parameter-binding-values bind1))
 					  (tags2 (parameter-binding-values bind2)))
 				      (and (= (length tags1) (length tags2))
-					   (every (case (parameter-binding-polarity
+					   (every (case (parameter-binding-polarity ;templates中定义的  2024年2月24日20:07:22
 							 bind1)
 						    ((+) cached-tag<=)
 						    ((-) cached-tag>=)
@@ -259,7 +250,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 				  (parametric-tag-bindings tag1)
 				  (parametric-tag-bindings tag2)))))
 
-		  (define-tag<= compound-tag? compound-tag?
+		  (define-tag<=  compound-tag?
 		    (lambda (tag1 tag2)
 		      (cond ((and (eq? 'disjoin (compound-tag-operator tag1))
 				  (eq? 'disjoin (compound-tag-operator tag2)))
@@ -270,29 +261,9 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 				    (compound-tag-components tag1)))
 			    ;; TODO(cph): add more rules here.
 			    (else #f))))
-		  
-		  (register-predicate! predicate? 'predicate)
-		  (register-predicate! simple-predicate? 'simple-predicate)
-		  (register-predicate! compound-predicate? 'compound-predicate)
 
-		  (register-predicate! disjunction? 'disjunction)
-		  (register-predicate! conjunction? 'conjunction)
-
-		  (set-predicate<=! simple-predicate? predicate?)
-		  (set-predicate<=! compound-predicate? predicate?)
-		  (set-predicate<=! parametric-predicate? predicate?)
-		  (set-predicate<=! disjunction? compound-predicate?)
-		  (set-predicate<=! conjunction? compound-predicate?)
-
-		  (register-predicate! tag? 'tag)
-
-		  (register-predicate! simple-tag? 'simple-tag)
-		  (register-predicate! compound-tag? 'compound-tag)
 		  (register-predicate! parametric-tag? 'parametric-tag)
-
-		  (set-predicate<=! simple-tag? tag?)
-
-		  (set-predicate<=! compound-tag? tag?)
 		  (set-predicate<=! parametric-tag? tag?)
-
-		  (register-predicate! tagged-data? 'tagged-data)))
+		  (set-predicate<=! parametric-predicate? predicate?)
+		  
+		  ))
