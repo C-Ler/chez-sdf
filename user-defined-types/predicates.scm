@@ -203,7 +203,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
   (cached-tag<= tag2 tag1))
 
 ;; These will be modified below.
-(define (define-tag<= predicate1 predicate2 handler)  ;扩展了taggin中的generic-tag<=,但是只用于了 parametric-tag? 和 compound-tag?
+(define (define-tag<= predicate1 predicate2 handler)  ;扩展了taggin中的generic-tag<=,但是只用于了 parametric-tag? 和 compound-tag
   (define-generic-procedure-handler generic-tag<=
     (match-args predicate1 predicate2)
     handler))
@@ -250,7 +250,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 				  (parametric-tag-bindings tag1)
 				  (parametric-tag-bindings tag2)))))
 
-		  (define-tag<=  compound-tag?
+		  (define-tag<= compound-tag? compound-tag?
 		    (lambda (tag1 tag2)
 		      (cond ((and (eq? 'disjoin (compound-tag-operator tag1))
 				  (eq? 'disjoin (compound-tag-operator tag2)))
@@ -261,9 +261,4 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 				    (compound-tag-components tag1)))
 			    ;; TODO(cph): add more rules here.
 			    (else #f))))
-
-		  (register-predicate! parametric-tag? 'parametric-tag)
-		  (set-predicate<=! parametric-tag? tag?)
-		  (set-predicate<=! parametric-predicate? predicate?)
-		  
 		  ))

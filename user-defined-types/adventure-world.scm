@@ -55,8 +55,11 @@ substrate set-up! error-generic-procedure-handler: Inapplicable generic procedur
 
 ;; (gp-pred-md-init)        ;这个同tags.scm 注册谓词的方式矛盾,不能同时用 2024年1月21日10:52:21
 
-(include "user-defined-types\\generics.scm")
-;; (include "user-defined-types\\tagging.scm")
+(include "user-defined-types\\tagging.scm") ;通过在gp及record的基础上实现谓词tag相关过程,进而实现tagged data  2024年1月24日21:24:38
+(include "user-defined-types\\simple-predicates.scm")
+(include "user-defined-types\\tags.scm")
+(include "user-defined-types\\generics.scm") ;SDF P90 多种匹配存储的构造方式  2024年1月24日21:23:35
+
 (include "user-defined-types\\predicates.scm")
 
 ;;; 下面这三个adventure不需要,arith才需要  2024年2月24日19:54:26
