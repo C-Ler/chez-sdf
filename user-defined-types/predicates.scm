@@ -51,8 +51,6 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
            (and (compound-tag? tag)
                 (eq? operator (compound-tag-operator tag)))))))
 
-(define disjunction? (compound-predicate-predicate 'disjoin))
-(define conjunction? (compound-predicate-predicate 'conjoin))
 
 (define compound-reg
   (begin
@@ -60,17 +58,12 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
     (set-predicate<=! compound-tag? tag?)
     (register-predicate! compound-predicate? 'compound-predicate)
     (set-predicate<=! compound-predicate? predicate?)
-    (register-predicate! disjunction? 'disjunction)
-    (register-predicate! conjunction? 'conjunction)
-    (set-predicate<=! disjunction? compound-predicate?)
-    (set-predicate<=! conjunction? compound-predicate?)
+    
     ))
-
-
 
 ;; Needed by code in common.
 ;; (define udp-predicates-store (make-alist-store eq?)) ;这个应该可以换成hash  2024年2月22日17:58:32
-(define udp-predicates-store (make-hash-table-store make-key-weak-eq-hash-table)) ;这个应该可以换成hash  2024年2月22日17:58:32
+(define udp-predicates-store (make-hash-table-store make-key-weak-eq-hash-table)) 
 
 (define have-compound-operator-registrar? (udp-predicates-store 'has?))
 (define get-compound-operator-registrar (udp-predicates-store 'get))
@@ -86,6 +79,12 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
     joint-predicate
     operator
     (map predicate->tag components))))
+
+(define (maybe-register-compound-predicate! datum-test
+                                            operator operands)
+  (if (every predicate? operands)
+      (register-compound-predicate! datum-test operator operands)
+      datum-test))
 
 (define (make-compound-tag name data-test tagging-strategy
                            operator components)
@@ -108,9 +107,68 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
       ;; (declare (ignore data-test operator))
       tags)
     (lambda (data-test operator tags)
-	    (standard-compound-tag data-test operator tags))))
+      (standard-compound-tag data-test operator tags))))
+
+(define (is-non-empty-list-of predicate) ;非空且有至少两个元素? 2024年1月15日19:47:21
+  (guarantee predicate? predicate)
+  (register-compound-predicate! (lambda (object)
+                                  (and (pair? object)
+                                       (list? (cdr object))
+                                       (every predicate object)))
+                                'is-non-empty-list-of
+                                (list predicate)))
+
+(define (is-pair-of car-predicate cdr-predicate)
+  (guarantee predicate? car-predicate)
+  (guarantee predicate? cdr-predicate)
+  (register-compound-predicate!
+   (lambda (object)
+     (and (pair? object)
+          (car-predicate (car object))
+          (cdr-predicate (cdr object))))
+   'is-pair-of
+   (list car-predicate cdr-predicate)))
+
+(define (complement predicate)		;谓词的补语 2024年1月15日19:50:07
+  (maybe-register-compound-predicate!
+   (lambda (object)
+     (not (predicate object)))
+   'complement
+   (list predicate)))
+
+(define (disjoin . predicates)
+  (disjoin* predicates))
+
+(define (disjoin* predicates)		;谓词的析取 2024年1月15日19:56:13
+  (maybe-register-compound-predicate!
+   (lambda (object)
+     (any (lambda (predicate)
+            (predicate object))
+          predicates))
+   'disjoin
+   predicates))
+
+(define (conjoin . predicates)		;谓词的合取 2024年1月15日19:57:39
+  (conjoin* predicates))
+
+(define (conjoin* predicates)
+  (maybe-register-compound-predicate!
+   (lambda (object)
+     (every (lambda (predicate)
+              (predicate object))
+            predicates))
+   'conjoin
+   predicates))
+
+(define disjunction? (compound-predicate-predicate 'disjoin))
+(define conjunction? (compound-predicate-predicate 'conjoin))
 
 (define pred-llpc (begin
+		    (register-predicate! disjunction? 'disjunction)
+		    (register-predicate! conjunction? 'conjunction)
+		    (set-predicate<=! disjunction? compound-predicate?)
+		    (set-predicate<=! conjunction? compound-predicate?)
+		    
 		    (define-compound-operator-registrar 'is-list-of
 		      (make-listish-memoizer))
 
@@ -219,11 +277,9 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 ;; and bottom tags.
 ;; (set! top-tag (predicate->tag any-object?))
 ;; (set! bottom-tag (predicate- >tag no-object?))
-(define (maybe-register-compound-predicate! datum-test
-                                            operator operands)
-  (if (every predicate? operands)
-      (register-compound-predicate! datum-test operator operands)
-      datum-test))
+
+
+;;; 应该得用上面这个把与或非三件套重新定义一下. 2024年2月27日21:16:06
 
 (define pred-rp (begin
 		  (define-tag<= bottom-tag? tag? true-tag<=)

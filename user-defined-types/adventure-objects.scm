@@ -276,7 +276,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
   (append-map get-things (people-here person)))
 
 (define (suffer! hits person)
-  (guarantee exact-positive-integer? hits)
+  (guarantee positive? hits)
   (say! person (list "Ouch!" hits "hits is more than I want!"))
   (set-health! person (- (get-health person) hits))
   (if (< (get-health person) 1)
@@ -292,7 +292,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
   (move! person (get-heaven) person))
 
 (define (resurrect! person health)
-  (guarantee exact-positive-integer? health)
+  (guarantee positive? health)
   (set-health! person health)
   (move! person (get-origin person) person))
 

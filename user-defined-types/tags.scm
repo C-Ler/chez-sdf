@@ -71,11 +71,13 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
     (primitive-predicate 'vector vector?)
 
 ;;; 下面两个去掉了exact的部分  2024年1月19日21:24:47
-    (primitive-predicate 'exact-nonnegative-integer
-			 nonnegative?)
+    (primitive-predicate ;; 'exact-nonnegative-integer ;按原本的代码,这个symbol同函数不一致不知道会怎样 2024年2月28日20:17:02
+     'nonnegative
+     nonnegative?)
 
-    (primitive-predicate 'exact-positive-integer
-			 positive?)
+    (primitive-predicate ;; 'exact-positive-integer
+     positive?
+     positive?)
 
     (primitive-predicate 'list list?)
 
