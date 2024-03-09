@@ -23,7 +23,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 ;;;; An adventure game at MIT
 
-#| load 本文件 (start-adventure '爱宠莎莎) (go 'west) (go 'east)
+#| load 本文件 (start-adventure '小明) (go 'west) (go 'east)
 course-6-frosh picks up course-6-froshbag
 Exception in error:wrong-type-argument: wrong argument type, expected #[#{simple-tag lc8mwm3c886i9cm630dumuiew-62} #[#{<tag-shared> lc8mwm3c886i9cm630dumuiew-63} list #<procedure list?> #<procedure constructor at tagging.scm:2680> #<procedure at tagging.scm:2989> #<procedure at collections.scm:1254>]]and caller value: with irritants (#<void> #<void>)
 

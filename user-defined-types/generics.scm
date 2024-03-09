@@ -133,6 +133,16 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
   (template-pattern-element-name
    (parameter-binding-element binding)))
 
+(define (parameter-binding-polarity binding) ;组合谓词调用  2024年2月29日21:35:40
+  (template-pattern-element-polarity
+   (parameter-binding-element binding)))
+
+(define (parameter-binding-values binding)
+  (if (template-pattern-element-single-valued?
+       (parameter-binding-element binding))
+      (list (parameter-binding-value binding))
+      (parameter-binding-value binding)))
+
 (define (template-pattern-name? object)
   (and (symbol? object)
        (not (template-pattern-operator? object))

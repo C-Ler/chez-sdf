@@ -105,32 +105,6 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 (define %object-tag-map
   (make-key-weak-eqv-hash-table))
 
-(define (implementation-tag-helper pred name)
-  (hash-table-intern! %object-tag-map name (lambda () (predicate->tag (register-predicate!  pred name)))))
-
-(define implementation-tag		 ;由于没找到chez及R6RS获取obj type的方法,只能手撸一个 2024年1月21日17:33:25
-  (let ((boolean-tag (predicate->tag boolean?))
-        (null-tag (predicate->tag null?)))
-    (lambda (object)
-      (cond ((eq? object #t) boolean-tag)
-            ((eq? object '()) null-tag)
-	    ((pair? object) (implementation-tag-helper pair? 'pair))
-	    ((integer? object) (implementation-tag-helper integer? 'integer))
-	    ((rational? object) (implementation-tag-helper rational? 'rational))
-	    ((real? object) (implementation-tag-helper real? 'real))
-	    ((complex? object) (implementation-tag-helper complex? 'complex))
-	    ((number? object) (implementation-tag-helper number? 'number))
-	    ((char? object) (implementation-tag-helper char? 'char))
-	    ((string? object) (implementation-tag-helper string? 'string))
-	    ((vector? object) (implementation-tag-helper vector? 'vector))
-	    ((symbol? object) (implementation-tag-helper symbol? 'symbol))
-	    ((procedure? object) (implementation-tag-helper procedure? 'procedure))
-	    ((bytevector? object) (implementation-tag-helper bytevector? 'bytevector))
-	    ((hashtable? object) (implementation-tag-helper hashtable? 'hashtable))
-	    ((record? object) (implementation-tag-helper record? (record-type-name (record-rtd object))))
-	    (else
-             (error 'implementation-tag "Unkown implementation type:" object))))))
-
 (define (%predefine-tags predicate name . type-names) ;下面这部分预定义,对于adven的部分可能无用,但是arith估计有用  2024年2月24日20:22:12
   ;; (declare (ignore name))
   (for-each (lambda (type-name)
@@ -154,6 +128,36 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 				      'interned-symbol 'uninterned-symbol)
 		     (%predefine-tags vector? 'vector 'vector)
 ))
+
+(define (implementation-tag-helper pred name)  ;上面的primitive-predicate 已经注册过实现自带的谓词了  2024-3-5 20:30:19
+  (hashtable-ref %object-tag-map name '未知的implementation-tag))
+
+(define implementation-tag		 ;由于没找到chez及R6RS获取obj type的方法,只能手撸一个 2024年1月21日17:33:25
+  ;; 这个本质上是需要从%object-tag-map中直接取出tag,但是也可以每次调用predicate->tag
+  (let ((boolean-tag (predicate->tag boolean?))
+        (null-tag (predicate->tag null?)))
+    (lambda (object)
+      (cond ((eq? object #t) boolean-tag)
+            ((eq? object '()) null-tag)
+	    ((pair? object) (implementation-tag-helper pair? 'pair))
+	    ((integer? object) (implementation-tag-helper integer? 'integer
+					       ))
+	    ((rational? object) (implementation-tag-helper rational? 'rational))
+	    ((real? object) (implementation-tag-helper real? 'real))
+	    ((complex? object) (implementation-tag-helper complex? 'complex))
+	    ((number? object) (implementation-tag-helper number? 'number))
+	    ((char? object) (implementation-tag-helper char? 'char))
+	    ((string? object) (implementation-tag-helper string? 'string))
+	    ((vector? object) (implementation-tag-helper vector? 'vector))
+	    ((symbol? object) (implementation-tag-helper symbol? 'symbol))
+	    ((procedure? object) (implementation-tag-helper procedure? 'procedure))
+	    ((bytevector? object) (implementation-tag-helper bytevector? 'bytevector))
+	    ((hashtable? object) (implementation-tag-helper hashtable? 'hashtable))
+	    ((record? object) (implementation-tag-helper record? (record-type-name (record-rtd object))))
+	    (else
+             (error 'implementation-tag "Unkown implementation type:" object))))))
+
+
 
 ;;; tagging 的另一部分,需要implementation-tag 2024年2月24日19:40:58
 (define get-tag				;tag的gp  2024年1月20日13:33:13

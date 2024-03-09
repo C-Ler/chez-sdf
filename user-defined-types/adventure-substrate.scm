@@ -21,7 +21,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 |#
 
-;;;; Properties
+;;;; Properties,用了record实现,但是因为二次修饰了,导致后面定义一个属性就得手工构造record本来可以自动构造的东西....  2024年3月4日19:55:16
 (define-record-type (<property> %make-property property?)
   (fields (immutable name property-name)
 	  (immutable predicate property-predicate)
@@ -92,7 +92,6 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 (define (set-property-value! property object value) ;给实例的指定属性赋值 2024年1月22日21:01:32
   ((get-binding property object) value))
-
 
 (define (type-properties type)		;某一type的全部属性,封装了下面的过程 2024年1月22日21:01:55
   (append-map %type-properties
@@ -193,7 +192,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
         (get-property-value property object)))
     procedure))
 
-(define (property-setter property type value-predicate)
+(define (property-setter property type value-predicate)	;如果两个类型拥有同一个属性呢?
   (let ((procedure
          (most-specific-generic-procedure
           (symbol-append 'set- (property-name property) '!)
@@ -202,10 +201,25 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
     (define-generic-procedure-handler procedure
       (match-args type value-predicate)
       (lambda (object value)
-        (let ((binding (get-binding property object)))
-          (%binding-set-prefix property value (binding) object)
+	(let ((binding (get-binding property object))) ;获取这个binding到调用的过程,没有任何问题
+          (%binding-set-prefix property value (binding) object)	;纯粹用来方便debug的... 2024年3月4日18:48:31
           (binding value))))
     procedure))
+
+;; (define-syntax property-setter
+;;   (syntax-rules ()
+;;     [(_ property type value-predicate)
+;;      (let ((name (symbol-append 'set- (property-name property) '!)))
+;;        (define name (most-specific-generic-procedure
+;; 		     (symbol-append 'set- (property-name property) '!)
+;; 		     2
+;; 		     #f))
+;;        (define-generic-procedure-handler name
+;; 	 (match-args type value-predicate)
+;; 	 (lambda (object value)
+;; 	   (let ((binding (get-binding property object))) ;获取这个binding到调用的过程,没有任何问题
+;;              (%binding-set-prefix property value (binding) object)	;纯粹用来方便debug的... 2024年3月4日18:48:31
+;;              (binding value)))))]))
 
 (define (%binding-set-prefix property new-value old-value object)
   (if debug-output

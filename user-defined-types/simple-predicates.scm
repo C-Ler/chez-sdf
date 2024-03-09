@@ -146,10 +146,6 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 (define (predicate-name predicate)	;这里的pred是md  2024年2月16日21:21:21
   (tag-name (predicate->tag predicate)))
 
-(define (parametric-predicate? object)
-  (and (predicate? object)
-       (parametric-tag? (predicate->tag object))))
-
 (define (predicate-constructor predicate)
   (tag-constructor (predicate->tag predicate)))
 
@@ -222,9 +218,6 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 (define (set-predicate<=! predicate superset)
   (set-tag<=! (predicate->tag predicate)
               (predicate->tag superset)))
-
-(define any-object? (conjoin))
-(define no-object? (disjoin))
 
 (define simple-pred-rl
   (begin

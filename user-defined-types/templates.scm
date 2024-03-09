@@ -22,16 +22,6 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 |#
 
 ;;;; Templates for parametric predicates
-(define (parameter-binding-polarity binding)
-  (template-pattern-element-polarity
-   (parameter-binding-element binding)))
-
-(define (parameter-binding-values binding)
-  (if (template-pattern-element-single-valued?
-       (parameter-binding-element binding))
-      (list (parameter-binding-value binding))
-      (parameter-binding-value binding)))
-
 (define (predicate-template-parameter-names template)
   (template-pattern->names
    (predicate-template-pattern template)))

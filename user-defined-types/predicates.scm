@@ -109,6 +109,14 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
     (lambda (data-test operator tags)
       (standard-compound-tag data-test operator tags))))
 
+(define (is-list-of predicate)		;对register-compound-predicate!的简单封装,变成仅支持扩展list形式的谓词,比如苹果类型,组件谓词可以是水果 木本 被子植物
+  (guarantee predicate? predicate)
+  (register-compound-predicate! (lambda (object) ;这个过程是个md谓词,判断传入的obj的任意list组件是否符合全部pred 2024年1月15日19:45:03
+                                  (and (list? object)
+                                       (every predicate object))) ;就guarantee在不出现意外时候返回object本身这件事来看,这里的pred可以直接用上面的表达式替换 2024年1月15日19:36:17
+                                'is-list-of
+                                (list predicate)))
+
 (define (is-non-empty-list-of predicate) ;非空且有至少两个元素? 2024年1月15日19:47:21
   (guarantee predicate? predicate)
   (register-compound-predicate! (lambda (object)
@@ -214,17 +222,8 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
                (memoizer data-test operator tags
                          post-process))))))))
 
-(define (true-tag<= tag1 tag2) ;; (declare (ignore tag1 tag2))
-  #t)
-
-(define top-tag (predicate->tag any-object?))
-(define bottom-tag (predicate->tag no-object?))
-
 (define (top-tag? object) (eqv? top-tag object))
-(define (non-top-tag? object) (not (top-tag? object)))
-
 (define (bottom-tag? object) (eqv? bottom-tag object))
-(define (non-bottom-tag? object) (not (bottom-tag? object)))
 
 (define pred-cor (begin
 		   (define-compound-operator-registrar 'disjoin
@@ -246,9 +245,21 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 			       (for-each (lambda (tag)
 					   (set-tag<=! joint-tag tag))
 					 tags)))))))
-
-		   
 		   ))
+
+(define (true-tag<= tag1 tag2) ;; (declare (ignore tag1 tag2))
+  #t)
+
+(define any-object? (conjoin))
+(define no-object? (disjoin))
+
+(define top-tag (predicate->tag any-object?))
+(define bottom-tag (predicate->tag no-object?))
+
+(define (non-top-tag? object) (not (top-tag? object)))
+
+(define (non-bottom-tag? object) (not (bottom-tag? object)))
+
 ;;;; Parametric predicates
 
 ;; (define (define-tag-record-printer record-type)

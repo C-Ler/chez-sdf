@@ -222,10 +222,10 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 (set-predicate<=! person? mobile-thing?)
 
 (define get-health
-  (property-getter persohealth person?))
+  (property-getter persohealth person?)) 
 
-(define set-health!
-  (property-setter persohealth person? any-object?))
+(define set-health!			;应该在property-setter之后直接就define了这个,或者说像record一样
+  (property-setter persohealth person? any-object?)) ;Exception in make-metadata-association:put!: Can't change metadata for: with irritants (#<procedure integer?> #[#{<simple-tag> m6qdk6xjri2u8pqx535l513we-2} #[#{<tag-shared> m6qdk6xjri2u8pqx535l513we-3} integer #<procedure integer?> #<procedure constructor at tagging.scm:2481> #<procedure at tagging.scm:2791> #<procedure at collections.scm:1254>]] #[#{<simple-tag> m6qdk6xjri2u8pqx535l513we-2} #[#{<tag-shared> m6qdk6xjri2u8pqx535l513we-3} integer #<procedure integer?> #<procedure constructor at tagging.scm:2481> #<procedure at tagging.scm:2791> #<procedure at collections.scm:1254>]])  2024年3月4日18:04:08
 
 (define get-bag
   (property-getter persobag person?))
@@ -576,7 +576,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 (define non-person-mobile-thing?
   (conjoin mobile-thing? (complement person?)))
 
-;; (set-predicate<=! non-person-mobile-thing? mobile-thing?)
+(set-predicate<=! non-person-mobile-thing? mobile-thing?)
 
 ;; coderef: generic-move:take  有问题,导致person也可以被take....
 (define-generic-procedure-handler generic-move!
