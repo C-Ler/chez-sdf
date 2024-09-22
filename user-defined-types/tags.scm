@@ -137,8 +137,8 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
   (let ((boolean-tag (predicate->tag boolean?))
         (null-tag (predicate->tag null?)))
     (lambda (object)
-      (cond ((eq? object #t) boolean-tag)
-            ((eq? object '()) null-tag)
+      (cond ((boolean? object) boolean-tag)
+	    ((eq? object '()) null-tag)
 	    ((pair? object) (implementation-tag-helper pair? 'pair))
 	    ((integer? object) (implementation-tag-helper integer? 'integer
 					       ))
@@ -154,8 +154,13 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 	    ((bytevector? object) (implementation-tag-helper bytevector? 'bytevector))
 	    ((hashtable? object) (implementation-tag-helper hashtable? 'hashtable))
 	    ((record? object) (implementation-tag-helper record? (record-type-name (record-rtd object))))
+	    ((output-port? object) (implementation-tag-helper output-port? 'output-port)) ;sdf-adventure 暴露了没实现这个 2024年9月22日11:15:35
+	    ((input-port? object) (implementation-tag-helper output-port? 'input-port))
+	    ((binary-port? object) (implementation-tag-helper binary-port? 'binary-port))
+	    ((textual-port? object) (implementation-tag-helper textual-port? 'textual-port))
+	    ((port? object) (implementation-tag-helper port? 'port))
 	    (else
-             (error 'implementation-tag "Unkown implementation type:" object))))))
+             (error 'implementation-tag "Unknown implementation type:" object))))))
 
 
 
