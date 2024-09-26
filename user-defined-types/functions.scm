@@ -138,7 +138,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 (define (append-map-function procedure function)
   (union-function*
    (append-map procedure (function-components function))))
-
+
 ;;;; Simple functions
 
 

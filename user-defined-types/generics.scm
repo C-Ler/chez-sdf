@@ -304,7 +304,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
   ;; 上面的异常是因为没有对gp进行handler扩展  2024年2月3日19:00:37
   ;; error: invalid message argument #<eqv hashtable> (who = "No such key in hashtable.", irritants = (#<procedure parametric-predicate? at generics.scm:5453>))
   (make-predicate-template 'function
-                           '((?* domains -) (? codomain))
+                           '((?* domains -) (? codomain)) ;定义域和值域
                            tagging-strategy:never
     (lambda (get-tag)
       (lambda (object)
