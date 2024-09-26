@@ -22,13 +22,14 @@
    simple-list-memoizer
    simple-lset-memoizer
    make-simple-dispatch-store
-   make-trie-dispatch-store
-   cache-wrapped-dispatch-store
+   make-trie-dispatch-store		;当把默认的dispatch-store换为这个之后就得到了效率高的GP,但是无法通过这个实现谓词组合的匹配  2024年3月8日16:09:56
+   cache-wrapped-dispatch-store		;使用了simple-list-memoizer,传入make-xx-dispatch-store,一般是hashtable,用于实现基于tag的匹配方式,避免apply谓词同时支持谓词组合  2024年3月8日22:02:52
    ;; make-default-dispatch-store 用的时候根据需要来定义 2024年1月1日19:26:55
-   generic-procedure-constructor
+   generic-procedure-constructor	;(generic-procedure-constructor make-simple-dispatch-store) -> simple-generic-procedure
    make-metadata-association
    make-hash-table-store		;测试make-metadata-association的void过程源头用
    make-alist-store
+   make-key-weak-eq-hash-table
    make-key-weak-eqv-hash-table
    predicate?
    get-predicate-metadata
@@ -36,10 +37,12 @@
    generic-procedure?
    %generic-procedure-metadata
    set-generic-procedure-metadata!
-   register-predicate!
+   ;; register-predicate!   ;在udp的predicates中重新定义了 2024年1月25日22:43:47
    constant-generic-procedure-handler
    guarantee
    guarantee-list-of
+   error:not-a
+   error:wrong-type-argument
    ;; applicability
    predicates-match? 
    ;; chaining-generic-procedure
@@ -51,14 +54,14 @@
    is-non-empty-list-of
    is-pair-of
    complement
-   lambda*
-   define*
+   conjoin
+   disjoin
+   
    equal*?
    equal*-predicate
    make-equal-hash-table
    make-weak-eq-set
-   conjoin
-   disjoin
+  
    fix:+
    hash-table-intern!
    hash-table-clear!
@@ -71,7 +74,6 @@
    symbol-append
    lset-difference
    append-map
-   is-list-of
    exact-integer?
    non-empty-list?
    list-of-unique-symbols?
@@ -82,8 +84,17 @@
    equal-predicate
    lset-union
    all-sequences-of
+   delete-duplicates
+   filter-map
+   lset=
+   ;;
+   index-predicate
+   index->booleans
    ;; chez-mit
    delv
+   delq!
+   lambda*
+   define*
    )
   
   (import
@@ -98,9 +109,9 @@
    (only (chez-srfi %3a125) hash-table-intern! make-hash-table
 	 hash-table-keys hash-table-ref hash-table-set! hash-table-contains? hash-table-clear!) ;本质上是对R6RS的过程进行了扩展  2024年1月6日20:16:43
    ;; (only (chez-srfi %3a69)  hash-table-exists?)  ;69是荒废的....调用过程时候有个warning,提示了,查阅了文档,说是R6RS定义了等价的hashtable-contains?  2024年1月6日15:57:54
-   (only (mit hash-tables) make-key-weak-eqv-hash-table strong-hash-table/constructor equal-hash-mod eqv-hash-mod)
+   (only (mit hash-tables) make-key-weak-eq-hash-table make-key-weak-eqv-hash-table strong-hash-table/constructor equal-hash-mod eqv-hash-mod)
    (only (mit arithmetic) fix:+)
-   (only (mit list) alist?)
+   (only (mit list) alist?  delq!)
    ;; (only (chez-srfi %3a128) make-list-hash)
    )
 
@@ -127,56 +138,66 @@
 
   (define (make-equal-hash-table)	;目前引用这个的过程会报错,tagging.scm,试图load adventure-world的时候,第二遍load就会变成另一种异常  2024年1月5日23:19:05
     ((strong-hash-table/constructor equal-hash-mod equal? #t
-				     ;; hash-table-entry-type:strong
-				     ))	
+				    ;; hash-table-entry-type:strong
+				    ))	
     )
   ;;
-  (define default-object void)
-  ;; utlis
+  (define default-object void)		;这个东西个debug增加了难度... 2024年3月3日20:52:53
+  
+  ;; utlis 这个实现远不如hash,只是为了方便得将('name "爱宠" 'health 3)转化为冒险游戏的属性 2024年3月2日17:19:43
   (define (plist? object)
-  (and (list? object)
-       (even? (length object))))
+    (and (list? object)
+	 (even? (length object))))
 
-(define (plist->alist plist)
-  (guarantee plist? plist 'plist->alist)
-  (let loop ((plist plist))
-    (if (pair? plist)
-        (cons (cons (car plist)
-                    (cadr plist))
-              (loop (cddr plist)))
-        '())))
+  (define (plist->alist plist)
+    (guarantee plist? plist 'plist->alist)
+    (let loop ((plist plist))
+      (if (pair? plist)
+          (cons (cons (car plist)
+                      (cadr plist))
+		(loop (cddr plist)))
+          '())))
 
-(define (alist->plist alist)
-  (guarantee alist? alist 'alist->plist)
-  (let loop ((alist alist))
-    (if (pair? alist)
-        (cons (car (car alist))
-              (cons (cdr (car alist))
-                    (loop (cdr alist))))
-        '())))
+  (define (alist->plist alist)
+    (guarantee alist? alist 'alist->plist)
+    (let loop ((alist alist))
+      (if (pair? alist)
+          (cons (car (car alist))
+		(cons (cdr (car alist))
+                      (loop (cdr alist))))
+          '())))
 
-(define (plist-value plist key)
-  (define (loop plist)
-    (if (pair? plist)
-        (begin
-          (if (not (pair? (cdr plist)))
-              (lose))
-          (if (eqv? (car plist) key)
-              (car (cdr plist))
-              (loop (cdr (cdr plist)))))
-        (begin
-          (if (not (null? plist))
-              (lose))
-          (default-object))))
+  (define (plist-value plist key)
+    (define (loop plist)
+      (if (pair? plist)
+          (begin
+            (if (not (pair? (cdr plist)))
+		(lose))
+            (if (eqv? (car plist) key)
+		(car (cdr plist))
+		(loop (cdr (cdr plist)))))
+          (begin
+            (if (not (null? plist))
+		(lose))
+            (default-object))))
 
-  (define (lose)
-    (error:not-a plist? plist 'plist-value))
+    (define (lose)
+      (error:not-a plist? plist 'plist-value))
 
-  (loop plist))
+    (loop plist))
 
   ;; predicates.scm 需要的过程
-  (define (error:wrong-type-argument value expected caller)
-    (error  'error:wrong-type-argument (string-append "wrong argument type, expected " expected "and caller value:") caller value))
+  (define sdf-void (void))
+
+  (define (void? x)
+    (eq? x sdf-void))
+  
+  (define (error:wrong-type-argument datum type operator) ;用于实现guarantee及其对ls的扩展,这个expected应该是个gp谓词的predicate-description返回值,但是实际结果是这个谓词的描述是某种内建对象,根本不是str,直接将内建对象write到port了... 2024年1月27日11:42:02
+    
+    (error  (if (void? operator)
+		'error:wrong-type-argument
+		operator)
+	    (string-append "wrong argument type, expected: " type " and datum as:") datum))
 
   (define (list-of-type? object predicate)
     (let loop ((l1 object) (l2 object))
@@ -236,16 +257,8 @@
   (include "memoizers.scm")
   (include "generic-procedures.ss")
 
-  ;; (include "utils.scm")			;会有重复定义,只能局部搬运 2024年1月6日22:22:06
+  (include "indexes.scm")
 
-  
-  (include "user-defined-types\\tags.scm")
-  (include "user-defined-types\\tagging.scm") ;通过在gp及record的基础上实现谓词tag相关过程,进而实现tagged data  2024年1月24日21:24:38
-  (include "user-defined-types\\predicates.scm") ;谓词的md就是tag,tag data是基于谓词和data构造的,还有谓词的组合,关系,tag及基础关系谓词的注册 2024年1月24日21:31:12
-  (include "user-defined-types\\templates.scm")	;参数匹配用 2024年1月24日21:32:46
-  (include "user-defined-types\\values.scm")  ;没详细阅读 2024年1月24日21:39:04
-  
-  (include "user-defined-types\\functions.scm")	;没细读,疑似对原有函数的扩展 2024年1月24日21:42:31
-  (include "user-defined-types\\generics.scm") ;SDF P90 多种匹配存储的构造方式  2024年1月24日21:23:35
+  ;; (include "utils.scm")			;会有重复定义,只能局部搬运 2024年1月6日22:22:06
   
   )

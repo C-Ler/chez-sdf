@@ -30,6 +30,26 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 (define (n:exact-nonnegative-integer? n)
   (and (integer? n) (>= n 0)))
 
+(define-syntax define-generic-procedure
+  (lambda (x)
+    (define gen-id				;TSPL 
+      (lambda (template-id . args)
+	(datum->syntax template-id
+		       (string->symbol
+			(apply string-append
+			       (map (lambda (x)
+				      (if (string? x)
+					  x
+					  (symbol->string (syntax->datum x))))
+				    args))))))
+
+    (syntax-case x ()
+      [(_  name e)
+       (with-syntax ([gp-name (gen-id #'name #'name "-generic-procedure")])
+	 #'(begin (define gp-name e)
+		  gp-name
+		  ))])))
+
 (define (generic-procedure-constructor dispatch-store-maker)
   ;; P140,避免了硬编码
   ;; (generic-procedure-constructor make-simple-dispatch-store) -> simple-generic-procedure
@@ -42,13 +62,15 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
   (lambda (name arity default-handler)
     (guarantee n:exact-nonnegative-integer? arity) ;确保参数个数是正整数  2024年1月16日22:17:07 
     (let ((metadata
-           (make-generic-metadata name	;在下面用record实现了 2024年1月16日22:39:22
-                                  arity
-                                  (dispatch-store-maker) ;传入的过程参数,比如下面那个make-simple-dispatch-store
-				  (or default-handler
-				      (error-generic-procedure-handler name)))))
+            (make-generic-metadata name	;在下面用record实现了 2024年1月16日22:39:22
+                                   arity
+                                   (dispatch-store-maker) ;传入的过程参数,比如下面那个make-simple-dispatch-store
+				   (or default-handler
+				       (error-generic-procedure-handler name))))
+	   ;; (the-generic-procedure (define-generic-procedure name (lambda args (generic-procedure-dispatch metadata args))))
+	   )
       (define (the-generic-procedure . args)
-        (generic-procedure-dispatch metadata args)) ;P143给出实现,是另外一个过程的封装,从metadata中根据args匹配合适的handler并apply到args
+	(generic-procedure-dispatch metadata args)) ;P143给出实现,是另外一个过程的封装,从metadata中根据args匹配合适的handler并apply到args
       (set-generic-procedure-metadata! the-generic-procedure ;md的assoc中的put!将gp作为key,md作为value存入 2024年1月16日22:41:18
                                        metadata)
       the-generic-procedure)))
@@ -216,7 +238,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
         ((set-default-handler!) set-default-handler!)
         ((get-rules) (lambda () rules))
         (else (error 'simple-dispatch-store "Unknown message:" message))))))
-
+
 (define (make-trie-dispatch-store)	;这里用到了trie.scm,无法冗余,还是不够好  2024年1月16日22:48:35
   (let ((delegate (make-simple-dispatch-store))
         (trie (make-trie)))

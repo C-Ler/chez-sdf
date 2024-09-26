@@ -22,20 +22,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 |#
 
 ;;;; Memoizers
-
-(define (make-list-memoizer make-list= dedup?)
-  (lambda (elt= get-key get-datum)
-    (let ((table (make-memoizer-table make-list= elt=)))
-      (lambda (list)
-        (let ((list
-                (if dedup?
-                   (delete-duplicates list elt=)
-                   list)))
-          (hash-table-intern! table
-                              (get-key list)
-                              (lambda () (get-datum list))))))))
-
-(define (make-memoizer-table make-list= elt=) ;这种方法有些古旧过时,完全可以换成R6RS那种形式 2024年1月16日22:04:04
+(define (make-memoizer-table make-list= elt=) ;这种方法有些古旧过时,完全可以换成R6RS那种形式,这个过程是核心,基于这个实现了make-list-memoizer 2024年1月16日22:04:04
   (cond ((eqv? eq? elt=)
          (make-hash-table (make-list= eq?)
                           (make-list-hash eq-hash)
@@ -49,9 +36,21 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
                           (make-list-hash equal-hash)
                           'rehash-after-gc? #t))
         (else
-         (error "Don't know how to memoize this:" elt=))))
+         (error 'memoizer-table "Don't know how to memoize this:" elt=))))
 
-(define (make-list= elt=)		;判断两个list的元素是否都符合谓词elt=  2024年1月16日22:05:10
+(define (make-list-memoizer make-list= dedup?)
+  (lambda (elt= get-key get-datum)
+    (let ((table (make-memoizer-table make-list= elt=)))
+      (lambda (list)
+        (let ((list
+                (if dedup?
+                   (delete-duplicates list elt=)
+                   list)))
+          (hash-table-intern! table
+                              (get-key list)
+                              (lambda () (get-datum list))))))))
+
+(define (make-list= elt=)		;将elt= apply到list的逐个元素是否都符合谓词  2024年1月16日22:05:10
   (define (list= a b)
     (if (pair? a)
         (and (pair? b)
@@ -79,7 +78,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 (define list-memoizer (make-list-memoizer make-list= #f)) ;有无重复元素的区别  2024年1月16日22:08:23
 (define lset-memoizer (make-list-memoizer make-lset= #t))
-
+
 (define (make-simple-list-memoizer list-memoizer)
   (lambda (elt= get-key get-datum)
     (let ((memoizer

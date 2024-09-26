@@ -21,7 +21,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 |#
 
-;;;; Simple predicate metadata
+;;;; Simple predicate metadata  由于在user-defined-type中被重新定义,下面几个都注释掉了  2024年1月25日21:50:31
 
 (define (register-predicate! predicate name)
   (set-predicate-metadata! predicate name) ;在predicate.scm中被定义,单纯的加入哈希表,返回本谓词.  2024年1月15日19:14:50
@@ -34,7 +34,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 (define predicate-name get-predicate-metadata) ;取出的是metadata中哈希值的部分,根据后register-compound-predicate!,可以推测这个值是个lol  2024年1月15日19:31:14
 
-;;;(define any-object? (conjoin))
+;; (define any-object? (conjoin))
 
 (define (any-object? object) #t)
 
@@ -45,6 +45,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 ;; (register-predicate! boolean? 'boolean)
 (define (gp-pred-md-init)
   ;; 由于这个闭包的存在,无法将代码放入 library,因为1:include的本质是将内容粘贴到出现的地方2:library中只能出现define
+  ;; 这里只是简单构造了形如 k:'number v:number?的md 2024年1月27日21:26:37
   (register-predicate! any-object? 'any-object)
   (register-predicate! number? 'number)
   (register-predicate! symbol? 'symbol)

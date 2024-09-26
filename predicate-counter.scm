@@ -32,7 +32,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 
 ;; (reset-predicate-counts!)
 
-(define (increment-predicate-count! predicate)
+(define (increment-predicate-count! predicate) ;common/applicability.scm|trie.scm 中引用了  2024年1月27日16:54:56
   (hashtable-update! (%predicate-counts)
                      predicate
 		     (lambda (count) (fix:+ count 1)) ;count 在默认情况下是个过程,类似丘奇计数,fix:+是mit scheme的接受整数参数,返回整数参数的加法 2023年12月7日22:43:21
@@ -51,7 +51,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 (define (get-predicate-counts)
   (hashtable->alist (%predicate-counts)))
 
-(define (hashtable->alist someht)
+(define (hashtable->alist someht)	;可以定义在别处 2024年1月27日16:53:52
   (let-values ([(keys values) (hashtable-entries someht)])
     (let loop ((n (- (vector-length keys) 1))
 	       (acc '()))
@@ -62,7 +62,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 		      acc))))
     ))
 
-(define (with-predicate-counts thunk)
+(define (with-predicate-counts thunk) ;仅在efficient-generic-procedures/microbench.scm中被引用 2024年1月27日16:53:57
   (parameterize ((%predicate-counts (make-eqv-hashtable)))
     (let ((value (thunk)))
       (for-each (lambda (p)

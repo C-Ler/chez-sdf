@@ -173,7 +173,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
         ((has?) has?)
         ((get) get)
         ((put!) put!)
-        (else (error "Unknown operator:" operator))))))
+        (else (error 'hash-table-store "Unknown operator:" operator))))))
 
 (define (make-metadata-association)	;所有的metadata-association都是hashtable实现的.被用于common/predicates.scm|eneric-procedures.scm,layers,user-defined-types/adventure-substrate.scm  2024年1月11日22:20:51
   (let* ((store
